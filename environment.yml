@@ -1,5 +1,7 @@
 name: nyc-airbnb
 channels:
+  - pytorch
+  - nvidia
   - conda-forge
   - defaults
 dependencies:
@@ -13,6 +15,9 @@ dependencies:
   - shap
   - umap-learn
   - hdbscan
+  - pytorch::pytorch
+  - pytorch::torchvision
+  - nvidia::cuda-toolkit=12.4
   - pip
   - pip:
       - gensim
