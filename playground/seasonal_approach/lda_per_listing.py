@@ -77,6 +77,7 @@ def main():
     parser.add_argument("--passes", type=int, default=10,
                         help="More passes feasible here (fewer docs)")
     parser.add_argument("--lang", default="en", help="Filter to language (or 'all')")
+    parser.add_argument("--workers", type=int, default=3)
     parser.add_argument("--no-below", type=int, default=5)
     parser.add_argument("--no-above", type=float, default=0.5)
     args = parser.parse_args()
@@ -112,7 +113,7 @@ def main():
         num_topics=args.num_topics,
         chunksize=2000,
         passes=args.passes,
-        workers=3,
+        workers=args.workers,
         random_state=42,
     )
     model_path = DATA_DIR / "lda_model_perlisting"
