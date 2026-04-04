@@ -19,6 +19,7 @@ dependencies:
   - pytorch::torchvision
   - nvidia::cuda-toolkit=12.4
   - pip
+  - spacy
   - pip:
       - gensim
       - bertopic

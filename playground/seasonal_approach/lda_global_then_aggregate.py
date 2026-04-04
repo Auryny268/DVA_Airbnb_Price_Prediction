@@ -11,11 +11,10 @@ Outputs:
 
 import argparse
 import logging
-import os
-import re
 from pathlib import Path
 
 import pandas as pd
+import spacy
 from gensim import corpora, models
 from gensim.models import CoherenceModel
 
@@ -26,24 +25,71 @@ log = logging.getLogger(__name__)
 
 DATA_DIR = Path(__file__).parent / "data"
 
+# Parts of speech to keep: nouns, adjectives, verbs, adverbs
+KEEP_POS = {"NOUN", "ADJ", "VERB", "ADV"}
 
-# ── helpers ──────────────────────────────────────────────────────────────────
+# Custom stopwords: Airbnb-generic terms, common names, pronouns, etc.
+CUSTOM_STOPS = {
+    # Airbnb generic
+    "airbnb", "host", "hosts", "guest", "guests", "stay", "stayed", "staying",
+    "place", "apartment", "room", "house", "home", "listing", "rental",
+    "bed", "bedroom", "bathroom", "kitchen", "building",
+    # Location generic
+    "brooklyn", "manhattan", "queens", "bronx", "york", "nyc", "city",
+    "street", "avenue", "block", "neighborhood", "area",
+    # Over-common review words
+    "great", "nice", "good", "beautiful", "lovely", "amazing", "wonderful",
+    "perfect", "excellent", "awesome", "fantastic", "love", "loved",
+    "recommend", "recommended", "definitely", "highly", "enjoy", "enjoyed",
+    # Functional
+    "get", "got", "make", "made", "take", "took", "come", "came", "going",
+    "would", "could", "also", "really", "very", "much", "well", "just",
+    "even", "back", "still", "right", "thing", "time", "day", "night",
+    # Common names in reviews
+    "david", "michael", "john", "alex", "chris", "mark", "james", "mary",
+    "sarah", "lisa", "anna", "mike", "dan", "tom", "joe", "bob",
+}
 
-def tokenize(text: str) -> list[str]:
-    """Simple whitespace + lowercase tokenizer with short-token filter."""
-    if not isinstance(text, str) or not text.strip():
-        return []
-    tokens = re.findall(r"[a-z]{3,}", text.lower())
+
+def load_nlp(model: str = "en_core_web_sm"):
+    """Load spaCy model with only the tokenizer and lemmatizer."""
+    log.info("Loading spaCy model: %s", model)
+    nlp = spacy.load(model, disable=["parser", "ner"])
+    nlp.max_length = 2_000_000
+    return nlp
+
+
+def tokenize(doc, stops: set[str]) -> list[str]:
+    """Extract lemmatized tokens, filtering by POS and stopwords."""
+    tokens = []
+    for token in doc:
+        if (
+            token.pos_ in KEEP_POS
+            and not token.is_stop
+            and token.is_alpha
+            and len(token.lemma_) >= 3
+            and token.lemma_.lower() not in stops
+        ):
+            tokens.append(token.lemma_.lower())
     return tokens
+
+
+def tokenize_texts(texts: list[str], nlp) -> list[list[str]]:
+    """Batch-tokenize a list of texts using spaCy pipe."""
+    results = []
+    for doc in nlp.pipe(texts, batch_size=1000):
+        results.append(tokenize(doc, CUSTOM_STOPS))
+    return results
 
 
 class ReviewCorpus:
     """Streams bag-of-words vectors from the CSV without loading it all."""
 
     def __init__(self, csv_path: str, dictionary: corpora.Dictionary,
-                 chunksize: int = 50_000, lang: str | None = "en"):
+                 nlp, chunksize: int = 50_000, lang: str | None = "en"):
         self.csv_path = csv_path
         self.dictionary = dictionary
+        self.nlp = nlp
         self.chunksize = chunksize
         self.lang = lang
 
@@ -54,13 +100,15 @@ class ReviewCorpus:
         ):
             if self.lang:
                 chunk = chunk[chunk["language"] == self.lang]
-            for text in chunk["clean_comments"]:
-                tokens = tokenize(text)
+            chunk = chunk.dropna(subset=["clean_comments"])
+            texts = chunk["clean_comments"].tolist()
+            for doc in self.nlp.pipe(texts, batch_size=1000):
+                tokens = tokenize(doc, CUSTOM_STOPS)
                 if tokens:
                     yield self.dictionary.doc2bow(tokens)
 
 
-def build_dictionary(csv_path: str, chunksize: int = 50_000,
+def build_dictionary(csv_path: str, nlp, chunksize: int = 50_000,
                      lang: str | None = "en",
                      no_below: int = 20, no_above: float = 0.5) -> corpora.Dictionary:
     """Stream through CSV once to build a filtered dictionary."""
@@ -73,7 +121,10 @@ def build_dictionary(csv_path: str, chunksize: int = 50_000,
     ):
         if lang:
             chunk = chunk[chunk["language"] == lang]
-        docs = [tokenize(t) for t in chunk["clean_comments"] if isinstance(t, str)]
+        chunk = chunk.dropna(subset=["clean_comments"])
+        texts = chunk["clean_comments"].tolist()
+        docs = tokenize_texts(texts, nlp)
+        docs = [d for d in docs if d]
         dictionary.add_documents(docs)
         total += len(docs)
         log.info("  processed %s docs so far ...", f"{total:,}")
@@ -99,9 +150,12 @@ def main():
 
     lang = None if args.lang == "all" else args.lang
 
+    # 0. Load spaCy
+    nlp = load_nlp()
+
     # 1. Build dictionary
     dictionary = build_dictionary(
-        args.reviews_csv, chunksize=args.chunksize, lang=lang,
+        args.reviews_csv, nlp=nlp, chunksize=args.chunksize, lang=lang,
         no_below=args.no_below, no_above=args.no_above,
     )
     dict_path = DATA_DIR / "lda_dictionary_global.dict"
@@ -109,7 +163,7 @@ def main():
     log.info("Dictionary saved to %s", dict_path)
 
     # 2. Build streaming corpus
-    corpus = ReviewCorpus(args.reviews_csv, dictionary,
+    corpus = ReviewCorpus(args.reviews_csv, dictionary, nlp=nlp,
                           chunksize=args.chunksize, lang=lang)
 
     # 3. Train LDA
@@ -155,8 +209,11 @@ def main():
     ):
         if lang:
             chunk = chunk[chunk["language"] == lang]
-        for listing_id, text in zip(chunk["listing_id"], chunk["clean_comments"]):
-            tokens = tokenize(text)
+        chunk = chunk.dropna(subset=["clean_comments"])
+        texts = chunk["clean_comments"].tolist()
+        ids = chunk["listing_id"].tolist()
+        for listing_id, doc in zip(ids, nlp.pipe(texts, batch_size=1000)):
+            tokens = tokenize(doc, CUSTOM_STOPS)
             if not tokens:
                 continue
             bow = dictionary.doc2bow(tokens)
@@ -187,8 +244,10 @@ def main():
     ):
         if lang:
             chunk = chunk[chunk["language"] == lang]
-        for text in chunk["clean_comments"]:
-            tokens = tokenize(text)
+        chunk = chunk.dropna(subset=["clean_comments"])
+        texts = chunk["clean_comments"].tolist()
+        for doc in nlp.pipe(texts, batch_size=1000):
+            tokens = tokenize(doc, CUSTOM_STOPS)
             if tokens:
                 coherence_texts.append(tokens)
             if len(coherence_texts) >= n_sample:

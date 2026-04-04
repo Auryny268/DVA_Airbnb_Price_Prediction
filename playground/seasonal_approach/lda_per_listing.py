@@ -11,11 +11,11 @@ Outputs:
 
 import argparse
 import logging
-import re
 from collections import defaultdict
 from pathlib import Path
 
 import pandas as pd
+import spacy
 from gensim import corpora, models
 from gensim.models import CoherenceModel
 
@@ -26,21 +26,60 @@ log = logging.getLogger(__name__)
 
 DATA_DIR = Path(__file__).parent / "data"
 
+# Parts of speech to keep: nouns, adjectives, verbs, adverbs
+KEEP_POS = {"NOUN", "ADJ", "VERB", "ADV"}
 
-# ── helpers ──────────────────────────────────────────────────────────────────
+# Custom stopwords: Airbnb-generic terms, common names, pronouns, etc.
+CUSTOM_STOPS = {
+    # Airbnb generic
+    "airbnb", "host", "hosts", "guest", "guests", "stay", "stayed", "staying",
+    "place", "apartment", "room", "house", "home", "listing", "rental",
+    "bed", "bedroom", "bathroom", "kitchen", "building",
+    # Location generic
+    "brooklyn", "manhattan", "queens", "bronx", "york", "nyc", "city",
+    "street", "avenue", "block", "neighborhood", "area",
+    # Over-common review words
+    "great", "nice", "good", "beautiful", "lovely", "amazing", "wonderful",
+    "perfect", "excellent", "awesome", "fantastic", "love", "loved",
+    "recommend", "recommended", "definitely", "highly", "enjoy", "enjoyed",
+    # Functional
+    "get", "got", "make", "made", "take", "took", "come", "came", "going",
+    "would", "could", "also", "really", "very", "much", "well", "just",
+    "even", "back", "still", "right", "thing", "time", "day", "night",
+    # Common names in reviews
+    "david", "michael", "john", "alex", "chris", "mark", "james", "mary",
+    "sarah", "lisa", "anna", "mike", "dan", "tom", "joe", "bob",
+}
 
-def tokenize(text: str) -> list[str]:
-    """Simple whitespace + lowercase tokenizer with short-token filter."""
-    if not isinstance(text, str) or not text.strip():
-        return []
-    tokens = re.findall(r"[a-z]{3,}", text.lower())
+
+def load_nlp(model: str = "en_core_web_sm"):
+    """Load spaCy model with only the tokenizer and lemmatizer."""
+    log.info("Loading spaCy model: %s", model)
+    nlp = spacy.load(model, disable=["parser", "ner"])
+    nlp.max_length = 2_000_000
+    return nlp
+
+
+def tokenize(doc, stops: set[str]) -> list[str]:
+    """Extract lemmatized tokens, filtering by POS and stopwords."""
+    tokens = []
+    for token in doc:
+        if (
+            token.pos_ in KEEP_POS
+            and not token.is_stop
+            and token.is_alpha
+            and len(token.lemma_) >= 3
+            and token.lemma_.lower() not in stops
+        ):
+            tokens.append(token.lemma_.lower())
     return tokens
 
 
-def stream_listing_docs(csv_path: str, chunksize: int, lang: str | None):
+def stream_listing_docs(csv_path: str, chunksize: int, lang: str | None,
+                        nlp) -> dict[str, list[str]]:
     """
-    Stream the CSV in chunks, accumulate tokens per listing_id.
-    Returns dict[listing_id] -> list[str] (concatenated tokens).
+    Stream the CSV in chunks, lemmatize + filter with spaCy,
+    accumulate tokens per listing_id.
 
     Memory note: This stores one token list per listing (~40-80k listings),
     NOT one per comment (~millions). Typically fits in a few GB of RAM.
@@ -54,8 +93,14 @@ def stream_listing_docs(csv_path: str, chunksize: int, lang: str | None):
     ):
         if lang:
             chunk = chunk[chunk["language"] == lang]
-        for listing_id, text in zip(chunk["listing_id"], chunk["clean_comments"]):
-            tokens = tokenize(text)
+        chunk = chunk.dropna(subset=["clean_comments"])
+
+        texts = chunk["clean_comments"].tolist()
+        ids = chunk["listing_id"].tolist()
+
+        # Batch process with spaCy pipe for speed
+        for listing_id, doc in zip(ids, nlp.pipe(texts, batch_size=1000)):
+            tokens = tokenize(doc, CUSTOM_STOPS)
             if tokens:
                 listing_tokens[listing_id].extend(tokens)
                 total_comments += 1
@@ -84,9 +129,12 @@ def main():
 
     lang = None if args.lang == "all" else args.lang
 
+    # 0. Load spaCy
+    nlp = load_nlp()
+
     # 1. Build per-listing documents
     listing_tokens = stream_listing_docs(
-        args.reviews_csv, chunksize=args.chunksize, lang=lang
+        args.reviews_csv, chunksize=args.chunksize, lang=lang, nlp=nlp
     )
     listing_ids = list(listing_tokens.keys())
     docs = [listing_tokens[lid] for lid in listing_ids]
