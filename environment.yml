@@ -1,0 +1,21 @@
+name: nyc-airbnb
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.12
+  - numpy=2.4.3
+  - pandas=3.0.1
+  - scipy=1.17.1
+  - scikit-learn
+  - plotly=6.6.0
+  - xgboost
+  - shap
+  - umap-learn
+  - hdbscan
+  - pip
+  - pip:
+      - gensim
+      - bertopic
+      - sentence-transformers
+      - streamlit
