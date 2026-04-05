@@ -23,6 +23,7 @@ from sentence_transformers import SentenceTransformer
 from hdbscan import HDBSCAN
 from umap import UMAP
 from sklearn.feature_extraction.text import CountVectorizer
+from bertopic.representation import MaximalMarginalRelevance
 
 logging.basicConfig(
     format="%(asctime)s | %(levelname)s | %(message)s", level=logging.INFO
@@ -215,11 +216,13 @@ def main():
     )
 
     log.info("Fitting BERTopic ...")
+    representation_model = MaximalMarginalRelevance(diversity=0.3)
     topic_model = BERTopic(
         embedding_model=embed_model,
         umap_model=umap_model,
         hdbscan_model=hdbscan_model,
         vectorizer_model=vectorizer_model,
+        representation_model=representation_model,
         nr_topics=None,  # discover naturally first, then reduce below
         calculate_probabilities=True,
         verbose=True,
