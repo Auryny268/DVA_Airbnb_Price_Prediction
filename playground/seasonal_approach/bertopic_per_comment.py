@@ -155,7 +155,7 @@ def main():
     from sklearn.feature_extraction.text import ENGLISH_STOP_WORDS
     custom_stops = list(ENGLISH_STOP_WORDS | HOST_NAME_STOPS)
     vectorizer_model = CountVectorizer(
-        stop_words=custom_stops, min_df=2, max_df=0.95, ngram_range=(1, 2),
+        stop_words=custom_stops, min_df=20, max_df=0.5, ngram_range=(1, 2),
     )
 
     log.info("Fitting BERTopic on %s comments ...", f"{len(sample_comments):,}")
@@ -191,6 +191,11 @@ def main():
     if args.nr_topics and args.nr_topics < len(set(topic_model.topics_)):
         log.info("Reducing to %d topics ...", args.nr_topics)
         topic_model.reduce_topics(sample_comments, nr_topics=args.nr_topics)
+        # Re-fit topic labels with relaxed vectorizer (few topic-level docs)
+        relaxed_vectorizer = CountVectorizer(
+            stop_words=custom_stops, min_df=2, max_df=0.95, ngram_range=(1, 2),
+        )
+        topic_model.update_topics(sample_comments, vectorizer_model=relaxed_vectorizer)
 
     n_topics = len(topic_model.get_topic_info()) - 1
     log.info("Final topic count: %d", n_topics)
