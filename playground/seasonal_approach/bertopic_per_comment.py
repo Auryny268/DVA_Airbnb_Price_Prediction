@@ -7,9 +7,9 @@ assigns each comment a topic, then aggregates topic proportions per listing.
 This preserves ALL text and does NOT dilute minority topics.
 
 Outputs:
-  - data/bertopic_comments_topics.csv            : topic ID, top words, count
-  - data/bertopic_comments_listing_topics.csv    : per-listing topic proportions
-  - data/bertopic_comments_model/                : saved model directory
+  - data/bertopic_comments_topics_new.csv            : topic ID, top words, count
+  - data/bertopic_comments_listing_topics_new.csv    : per-listing topic proportions
+  - data/bertopic_comments_model_new/                : saved model directory
 """
 
 import argparse
@@ -186,7 +186,7 @@ def main():
 
     # 5. Save topic info
     topic_info = topic_model.get_topic_info()
-    topic_info.to_csv(DATA_DIR / "bertopic_comments_topics.csv", index=False)
+    topic_info.to_csv(DATA_DIR / "bertopic_comments_topics_new.csv", index=False)
 
     print("\n=== Discovered Topics ===")
     for _, row in topic_info.iterrows():
@@ -239,13 +239,13 @@ def main():
         topic_proportions, on="listing_id"
     )
 
-    listing_path = DATA_DIR / "bertopic_comments_listing_topics.csv"
+    listing_path = DATA_DIR / "bertopic_comments_listing_topics_new.csv"
     listing_df.to_csv(listing_path, index=False)
     log.info("Per-listing topics saved to %s (%s listings)",
              listing_path, f"{len(listing_df):,}")
 
     # 8. Save model
-    model_dir = DATA_DIR / "bertopic_comments_model"
+    model_dir = DATA_DIR / "bertopic_comments_model_new"
     topic_model.save(str(model_dir), serialization="safetensors",
                      save_ctfidf=True, save_embedding_model=args.embedding_model)
     log.info("Model saved to %s", model_dir)

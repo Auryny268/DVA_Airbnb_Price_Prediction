@@ -5,9 +5,9 @@ Embeds each comment individually (no truncation), averages embeddings
 per listing, then runs BERTopic on listing-level averaged embeddings.
 
 Outputs:
-  - data/bertopic_avg_topics.csv            : topic ID, top words, count
-  - data/bertopic_avg_listing_topics.csv    : per-listing topic probabilities
-  - data/bertopic_avg_model/                : saved model directory
+  - data/bertopic_avg_topics_new.csv            : topic ID, top words, count
+  - data/bertopic_avg_listing_topics_new.csv    : per-listing topic probabilities
+  - data/bertopic_avg_model_new/                : saved model directory
 """
 
 import argparse
@@ -196,7 +196,7 @@ def main():
 
     # 5. Save topic info
     topic_info = topic_model.get_topic_info()
-    topic_info.to_csv(DATA_DIR / "bertopic_avg_topics.csv", index=False)
+    topic_info.to_csv(DATA_DIR / "bertopic_avg_topics_new.csv", index=False)
 
     print("\n=== Discovered Topics ===")
     for _, row in topic_info.iterrows():
@@ -217,11 +217,11 @@ def main():
         listing_df[f"top{j+1}_topic"] = top3[:, j]
         listing_df[f"top{j+1}_prob"] = top3_p[:, j]
 
-    listing_df.to_csv(DATA_DIR / "bertopic_avg_listing_topics.csv", index=False)
+    listing_df.to_csv(DATA_DIR / "bertopic_avg_listing_topics_new.csv", index=False)
     log.info("Per-listing topics saved (%s listings)", f"{len(listing_df):,}")
 
     # 7. Save model
-    model_dir = DATA_DIR / "bertopic_avg_model"
+    model_dir = DATA_DIR / "bertopic_avg_model_new"
     topic_model.save(str(model_dir), serialization="safetensors",
                      save_ctfidf=True, save_embedding_model=args.embedding_model)
     log.info("Model saved to %s", model_dir)
