@@ -46,6 +46,17 @@ HOST_NAME_STOPS = {
     "samuel", "lawrence", "benjamin", "bruce", "harry", "adam", "douglas",
     "leonard", "ernest", "vincent", "phillip", "bobby", "johnny", "billy",
     "albert", "willie", "randy", "howard", "eugene", "carlos", "jose",
+    # Airbnb generic
+    "airbnb", "bnb", "host", "hosts", "guest", "guests", "stay", "stayed", "staying",
+    "place", "apartment", "room", "house", "home", "listing", "rental",
+    "bed", "bedroom", "bathroom", "kitchen", "building",
+    # Location generic
+    "brooklyn", "manhattan", "queens", "bronx", "york", "nyc", "city",
+    "street", "avenue", "block", "neighborhood", "area",
+    # Functional
+    "get", "got", "make", "made", "take", "took", "come", "came", "going",
+    "would", "could", "also", "really", "very", "much", "well", "just",
+    "even", "back", "still", "right", "thing", "time", "day", "night",
 }
 
 
