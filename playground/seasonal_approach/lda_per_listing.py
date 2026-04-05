@@ -76,7 +76,7 @@ def tokenize(doc, stops: set[str]) -> list[str]:
 
 
 def stream_listing_docs(csv_path: str, chunksize: int, lang: str | None,
-                        nlp) -> dict[str, list[str]]:
+                        nlp, n_process: int = 4) -> dict[str, list[str]]:
     """
     Stream the CSV in chunks, lemmatize + filter with spaCy,
     accumulate tokens per listing_id.
@@ -99,7 +99,7 @@ def stream_listing_docs(csv_path: str, chunksize: int, lang: str | None,
         ids = chunk["listing_id"].tolist()
 
         # Batch process with spaCy pipe for speed
-        for listing_id, doc in zip(ids, nlp.pipe(texts, batch_size=1000)):
+        for listing_id, doc in zip(ids, nlp.pipe(texts, batch_size=2000, n_process=n_process)):
             tokens = tokenize(doc, CUSTOM_STOPS)
             if tokens:
                 listing_tokens[listing_id].extend(tokens)
@@ -123,6 +123,8 @@ def main():
                         help="More passes feasible here (fewer docs)")
     parser.add_argument("--lang", default="en", help="Filter to language (or 'all')")
     parser.add_argument("--workers", type=int, default=3)
+    parser.add_argument("--n-process", type=int, default=4,
+                        help="Number of spaCy parallel processes")
     parser.add_argument("--no-below", type=int, default=5)
     parser.add_argument("--no-above", type=float, default=0.5)
     args = parser.parse_args()
@@ -134,7 +136,8 @@ def main():
 
     # 1. Build per-listing documents
     listing_tokens = stream_listing_docs(
-        args.reviews_csv, chunksize=args.chunksize, lang=lang, nlp=nlp
+        args.reviews_csv, chunksize=args.chunksize, lang=lang, nlp=nlp,
+        n_process=args.n_process
     )
     listing_ids = list(listing_tokens.keys())
     docs = [listing_tokens[lid] for lid in listing_ids]
