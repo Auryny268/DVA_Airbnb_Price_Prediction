@@ -112,12 +112,10 @@ def main():
     parser = argparse.ArgumentParser(
         description="BERTopic with per-comment embedding averaging")
     parser.add_argument("--reviews-csv", required=True)
-    parser.add_argument("--num-topics", type=int, default=None)
     parser.add_argument("--chunksize", type=int, default=50_000)
     parser.add_argument("--lang", default="en")
     parser.add_argument("--embedding-model", default="all-MiniLM-L6-v2")
     parser.add_argument("--embedding-batch-size", type=int, default=512)
-    parser.add_argument("--min-topic-size", type=int, default=30)
     parser.add_argument("--min-cluster-size", type=int, default=5,
                         help="HDBSCAN min_cluster_size (lower = more clusters)")
     parser.add_argument("--min-samples", type=int, default=3,
@@ -241,12 +239,14 @@ def main():
     # Merge topics down to target number
     if args.nr_topics and args.nr_topics < len(set(topics)):
         log.info("Reducing to %d topics ...", args.nr_topics)
-        topic_model.reduce_topics(documents, nr_topics=args.nr_topics)
-        # Re-fit topic labels with relaxed vectorizer (few topic-level docs)
+        # Swap to relaxed vectorizer before reduce_topics — it internally
+        # re-fits c-TF-IDF at each merge step, and min_df=20 crashes when
+        # the number of topic-level docs drops below ~40.
         relaxed_vectorizer = CountVectorizer(
             stop_words=custom_stops, min_df=2, max_df=0.95, ngram_range=(1, 2),
         )
-        topic_model.update_topics(documents, vectorizer_model=relaxed_vectorizer)
+        topic_model.vectorizer_model = relaxed_vectorizer
+        topic_model.reduce_topics(documents, nr_topics=args.nr_topics)
         topics = topic_model.topics_
         probs = topic_model.probabilities_
 
