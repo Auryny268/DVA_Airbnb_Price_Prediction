@@ -163,7 +163,7 @@ def main():
     from sklearn.feature_extraction.text import ENGLISH_STOP_WORDS
     custom_stops = list(ENGLISH_STOP_WORDS | HOST_NAME_STOPS)
     vectorizer_model = CountVectorizer(
-        stop_words=custom_stops, min_df=5, max_df=0.5, ngram_range=(1, 2),
+        stop_words=custom_stops, min_df=2, max_df=0.95, ngram_range=(1, 2),
     )
 
     log.info("Fitting BERTopic ...")
