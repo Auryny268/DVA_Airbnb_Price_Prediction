@@ -32,6 +32,22 @@ log = logging.getLogger(__name__)
 
 DATA_DIR = Path(__file__).parent / "data"
 
+# Host names that dominate topic labels — filter from CountVectorizer
+HOST_NAME_STOPS = {
+    "carlos", "jose", "alicia", "evelyn", "daniel", "david", "maria", "juan",
+    "jorge", "luis", "miguel", "ana", "pedro", "ricardo", "antonio", "marco",
+    "jessica", "jennifer", "brian", "kevin", "jason", "ryan", "eric", "sean",
+    "patrick", "nicole", "ashley", "amanda", "stephanie", "rachel", "lauren",
+    "matthew", "andrew", "robert", "william", "richard", "thomas", "steven",
+    "timothy", "christopher", "jonathan", "peter", "paul", "george", "edward",
+    "henry", "frank", "ray", "roger", "larry", "terry", "keith", "scott",
+    "greg", "dennis", "carl", "wayne", "eugene", "ralph", "russell", "louis",
+    "philip", "howard", "barry", "fred", "arthur", "albert", "gerald",
+    "samuel", "lawrence", "benjamin", "bruce", "harry", "adam", "douglas",
+    "leonard", "ernest", "vincent", "phillip", "bobby", "johnny", "billy",
+    "albert", "willie", "randy", "howard", "eugene", "carlos", "jose",
+}
+
 
 def clean_text(text: str) -> str:
     if not isinstance(text, str):
@@ -50,6 +66,14 @@ def main():
     parser.add_argument("--embedding-batch-size", type=int, default=512)
     parser.add_argument("--min-topic-size", type=int, default=100,
                         help="Higher than default — millions of docs")
+    parser.add_argument("--min-cluster-size", type=int, default=10,
+                        help="HDBSCAN min_cluster_size")
+    parser.add_argument("--min-samples", type=int, default=5,
+                        help="HDBSCAN min_samples")
+    parser.add_argument("--nr-topics", type=int, default=15,
+                        help="Merge down to this many topics after fitting")
+    parser.add_argument("--reduce-outliers", action=argparse.BooleanOptionalAction,
+                        default=True, help="Reassign outliers to nearest topic")
     parser.add_argument("--sample-size", type=int, default=500_000,
                         help="Sample size for fitting BERTopic (memory)")
     parser.add_argument("--umap-n-neighbors", type=int, default=15)
@@ -112,11 +136,15 @@ def main():
         min_dist=0.0, metric="cosine", random_state=42,
     )
     hdbscan_model = HDBSCAN(
-        min_cluster_size=args.min_topic_size,
+        min_cluster_size=args.min_cluster_size,
+        min_samples=args.min_samples,
         metric="euclidean", prediction_data=True,
     )
+    # Combine sklearn English stop words with host names
+    from sklearn.feature_extraction.text import ENGLISH_STOP_WORDS
+    custom_stops = list(ENGLISH_STOP_WORDS | HOST_NAME_STOPS)
     vectorizer_model = CountVectorizer(
-        stop_words="english", min_df=10, max_df=0.5, ngram_range=(1, 2),
+        stop_words=custom_stops, min_df=10, max_df=0.5, ngram_range=(1, 2),
     )
 
     log.info("Fitting BERTopic on %s comments ...", f"{len(sample_comments):,}")
@@ -125,14 +153,36 @@ def main():
         umap_model=umap_model,
         hdbscan_model=hdbscan_model,
         vectorizer_model=vectorizer_model,
-        nr_topics=args.num_topics,
+        nr_topics=None,  # discover naturally first, then reduce below
         calculate_probabilities=False,  # skip probs during fit (memory)
         verbose=True,
     )
     topic_model.fit(sample_comments, sample_embeddings)
 
-    n_topics = len(topic_model.get_topic_info()) - 1  # exclude -1
-    log.info("Discovered %d topics", n_topics)
+    n_raw = len(topic_model.get_topic_info()) - 1
+    log.info("Discovered %d raw topics", n_raw)
+
+    # Reduce outliers on the sample fit
+    if args.reduce_outliers:
+        log.info("Reducing outliers on fit sample (strategy=embeddings) ...")
+        sample_topics = topic_model.topics_
+        sample_topics = topic_model.reduce_outliers(
+            sample_comments, sample_topics,
+            strategy="embeddings", embeddings=sample_embeddings
+        )
+        topic_model.update_topics(sample_comments, topics=sample_topics,
+                                  vectorizer_model=vectorizer_model)
+        outliers_after = sum(1 for t in sample_topics if t == -1)
+        log.info("Sample outliers after reduction: %d (%.1f%%)",
+                 outliers_after, outliers_after / len(sample_topics) * 100)
+
+    # Merge topics down to target number
+    if args.nr_topics and args.nr_topics < len(set(topic_model.topics_)):
+        log.info("Reducing to %d topics ...", args.nr_topics)
+        topic_model.reduce_topics(sample_comments, nr_topics=args.nr_topics)
+
+    n_topics = len(topic_model.get_topic_info()) - 1
+    log.info("Final topic count: %d", n_topics)
 
     # 5. Save topic info
     topic_info = topic_model.get_topic_info()
