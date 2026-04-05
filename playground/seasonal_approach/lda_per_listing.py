@@ -52,31 +52,32 @@ CUSTOM_STOPS = {
 }
 
 
-def load_nlp(model: str = "en_core_web_sm"):
+def load_nlp(model: str = "en_core_web_sm", pos_filter: bool = True):
     """Load spaCy model with only the tokenizer and lemmatizer."""
-    log.info("Loading spaCy model: %s", model)
-    nlp = spacy.load(model, disable=["parser", "ner"])
+    log.info("Loading spaCy model: %s (POS filtering: %s)", model, pos_filter)
+    disable = ["parser", "ner"]
+    if not pos_filter:
+        disable.append("tagger")
+    nlp = spacy.load(model, disable=disable)
     nlp.max_length = 2_000_000
     return nlp
 
 
-def tokenize(doc, stops: set[str]) -> list[str]:
-    """Extract lemmatized tokens, filtering by POS and stopwords."""
+def tokenize(doc, stops: set[str], pos_filter: bool = True) -> list[str]:
+    """Extract lemmatized tokens, optionally filtering by POS and stopwords."""
     tokens = []
     for token in doc:
-        if (
-            token.pos_ in KEEP_POS
-            and not token.is_stop
-            and token.is_alpha
-            and len(token.lemma_) >= 3
-            and token.lemma_.lower() not in stops
-        ):
+        if not token.is_stop and token.is_alpha and len(token.lemma_) >= 3 \
+                and token.lemma_.lower() not in stops:
+            if pos_filter and token.pos_ not in KEEP_POS:
+                continue
             tokens.append(token.lemma_.lower())
     return tokens
 
 
 def stream_listing_docs(csv_path: str, chunksize: int, lang: str | None,
-                        nlp, n_process: int = 4) -> dict[str, list[str]]:
+                        nlp, n_process: int = 4,
+                        pos_filter: bool = True) -> dict[str, list[str]]:
     """
     Stream the CSV in chunks, lemmatize + filter with spaCy,
     accumulate tokens per listing_id.
@@ -100,7 +101,7 @@ def stream_listing_docs(csv_path: str, chunksize: int, lang: str | None,
 
         # Batch process with spaCy pipe for speed
         for listing_id, doc in zip(ids, nlp.pipe(texts, batch_size=2000, n_process=n_process)):
-            tokens = tokenize(doc, CUSTOM_STOPS)
+            tokens = tokenize(doc, CUSTOM_STOPS, pos_filter=pos_filter)
             if tokens:
                 listing_tokens[listing_id].extend(tokens)
                 total_comments += 1
@@ -125,6 +126,8 @@ def main():
     parser.add_argument("--workers", type=int, default=3)
     parser.add_argument("--n-process", type=int, default=4,
                         help="Number of spaCy parallel processes")
+    parser.add_argument("--pos-filter", action=argparse.BooleanOptionalAction,
+                        default=True, help="Filter by POS tags (NOUN/ADJ/VERB/ADV)")
     parser.add_argument("--no-below", type=int, default=5)
     parser.add_argument("--no-above", type=float, default=0.5)
     args = parser.parse_args()
@@ -132,12 +135,12 @@ def main():
     lang = None if args.lang == "all" else args.lang
 
     # 0. Load spaCy
-    nlp = load_nlp()
+    nlp = load_nlp(pos_filter=args.pos_filter)
 
     # 1. Build per-listing documents
     listing_tokens = stream_listing_docs(
         args.reviews_csv, chunksize=args.chunksize, lang=lang, nlp=nlp,
-        n_process=args.n_process
+        n_process=args.n_process, pos_filter=args.pos_filter
     )
     listing_ids = list(listing_tokens.keys())
     docs = [listing_tokens[lid] for lid in listing_ids]
