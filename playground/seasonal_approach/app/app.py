@@ -5,12 +5,14 @@ Team 005 · CSE 6242 Spring 2026
 Run: streamlit run app.py
 """
 
+import ast
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 import plotly.express as px
 import streamlit as st
 from pathlib import Path
+from wordcloud import WordCloud
 
 # ── Page config ──────────────────────────────────────────────────────────────
 st.set_page_config(
@@ -47,9 +49,19 @@ def load_data():
     preds["room_type_label"] = preds["room_type_ord"].map(ROOM_MAP)
     si["month_name"] = si["month"].map(MONTH_NAMES)
 
-    return preds, fm, shap_pl, shap_sum, si
+    # Topic & sentiment data
+    topics_df = pd.read_csv(DATA / "bertopic_avg_topics_new_2.csv")
+    listing_topics = pd.read_csv(DATA / "bertopic_avg_listing_topics_new_2.csv")
+    sentiment_df = pd.read_csv(DATA / "listings_with_determinants.csv")
 
-preds, fm, shap_pl, shap_sum, si = load_data()
+    # Parse Representation column from string list to actual list
+    topics_df["words"] = topics_df["Representation"].apply(
+        lambda x: ast.literal_eval(x) if isinstance(x, str) else []
+    )
+
+    return preds, fm, shap_pl, shap_sum, si, topics_df, listing_topics, sentiment_df
+
+preds, fm, shap_pl, shap_sum, si, topics_df, listing_topics, sentiment_df = load_data()
 
 REVIEW_COLS = [
     "review_scores_rating", "review_scores_accuracy",
@@ -206,13 +218,13 @@ with tab1:
 # TAB 2 — Spider Chart per Listing
 # ─────────────────────────────────────────────────────────────────────────────
 with tab2:
-    st.subheader("Review Score Radar — Per Listing")
+    st.subheader("Listing Deep Dive — Reviews, Topics & Sentiment")
     st.caption(
-        "Select up to 5 listings to compare their 7 review dimension scores. "
-        "Scores are on a 1–5 scale."
+        "Select up to 5 listings to compare review scores (radar), "
+        "dominant review topics (word cloud), and sentiment breakdown."
     )
 
-    # Let user pick listings by neighbourhood + search
+    # ── Listing selector ────────────────────────────────────────────────
     neigh_opts = sorted(fm_filtered["neighbourhood_cleansed"].unique())
     sel_neigh  = st.selectbox("Filter by neighbourhood", ["All"] + neigh_opts)
 
@@ -221,7 +233,6 @@ with tab2:
     else:
         neigh_fm = fm_filtered
 
-    # Show a sample table to pick from
     display_cols = ["id","neighbourhood_cleansed","room_type_label","price_numeric"] + REVIEW_COLS
     display_cols = [c for c in display_cols if c in neigh_fm.columns]
     sample = neigh_fm[display_cols].dropna(subset=REVIEW_COLS).head(200)
@@ -235,12 +246,14 @@ with tab2:
 
     if sel_ids:
         sel_rows = fm[fm["id"].astype(str).isin(sel_ids)]
-        fig_spider = go.Figure()
-
         colors = [ACCENT, TEAL, "#FFB400", "#8B5CF6", "#10B981"]
+
+        # ── 1) Review score radar ───────────────────────────────────────
+        st.markdown("#### Review Score Radar")
+        fig_spider = go.Figure()
         for i, (_, row) in enumerate(sel_rows.iterrows()):
             scores = [row[c] for c in REVIEW_COLS]
-            scores_closed = scores + [scores[0]]   # close the polygon
+            scores_closed = scores + [scores[0]]
             labels_closed = REVIEW_LABELS + [REVIEW_LABELS[0]]
             fig_spider.add_trace(go.Scatterpolar(
                 r=scores_closed,
@@ -251,15 +264,138 @@ with tab2:
                 line=dict(color=colors[i % len(colors)], width=2),
                 name=f"ID {row['id']} · {row.get('neighbourhood_cleansed','')[:20]}",
             ))
-
         fig_spider.update_layout(
             polar=dict(radialaxis=dict(visible=True, range=[3.5, 5])),
-            height=500,
-            legend=dict(orientation="h", yanchor="bottom", y=-0.2),
+            height=480,
+            legend=dict(orientation="h", yanchor="bottom", y=-0.25),
         )
         st.plotly_chart(fig_spider, use_container_width=True)
 
-        # Show scores table
+        # ── 2) Word clouds — top 3 topics per listing ──────────────────
+        st.markdown("#### Top 3 Review Topics — Word Clouds")
+        # Build topic label lookup (skip topic -1 label for clarity)
+        topic_label_map = {}
+        topic_words_map = {}
+        for _, trow in topics_df.iterrows():
+            tid = int(trow["Topic"])
+            label = trow["Name"]
+            # Clean up the label: "0_host_recommend_comfortable_subway" → "host, recommend, comfortable, subway"
+            parts = label.split("_", 1)
+            if len(parts) > 1:
+                topic_label_map[tid] = parts[1].replace("_", ", ")
+            else:
+                topic_label_map[tid] = label
+            topic_words_map[tid] = trow["words"]
+
+        sel_int_ids = [int(x) for x in sel_ids]
+        listing_topic_rows = listing_topics[listing_topics["listing_id"].isin(sel_int_ids)]
+
+        # Render word clouds in columns (one per listing)
+        n_cols = min(len(sel_ids), 3)
+        for batch_start in range(0, len(sel_ids), n_cols):
+            batch = sel_ids[batch_start : batch_start + n_cols]
+            wc_cols = st.columns(len(batch))
+            for col, lid_str in zip(wc_cols, batch):
+                lid = int(lid_str)
+                lt_row = listing_topic_rows[listing_topic_rows["listing_id"] == lid]
+                with col:
+                    if lt_row.empty:
+                        st.caption(f"Listing {lid} — no topic data")
+                        continue
+                    lt = lt_row.iloc[0]
+                    # Gather top-3 topic ids and probabilities
+                    top_topics = []
+                    for rank in range(1, 4):
+                        tid = int(lt[f"top{rank}_topic"])
+                        prob = float(lt[f"top{rank}_prob"])
+                        top_topics.append((tid, prob))
+
+                    # Build word frequency dict: word weight = topic_prob * (1 / word_rank)
+                    word_freq = {}
+                    for tid, prob in top_topics:
+                        words = topic_words_map.get(tid, [])
+                        for rank, w in enumerate(words):
+                            weight = prob * (1.0 / (rank + 1))
+                            word_freq[w] = word_freq.get(w, 0) + weight
+
+                    if not word_freq:
+                        st.caption(f"Listing {lid} — no words")
+                        continue
+
+                    wc = WordCloud(
+                        width=400, height=280,
+                        background_color="white",
+                        colormap="viridis",
+                        max_words=30,
+                        prefer_horizontal=0.7,
+                        relative_scaling=0.5,
+                    ).generate_from_frequencies(word_freq)
+
+                    # Top topic labels for caption
+                    top_labels = [
+                        f"T{tid} ({prob:.0%})" for tid, prob in top_topics if prob > 0.001
+                    ]
+                    st.caption(f"**Listing {lid}** — {', '.join(top_labels)}")
+                    st.image(wc.to_array(), use_container_width=True)
+
+        # ── 3) Sentiment breakdown bar ──────────────────────────────────
+        st.markdown("#### Sentiment Breakdown")
+        sent_rows = sentiment_df[sentiment_df["listing_id"].isin(sel_int_ids)].copy()
+
+        if sent_rows.empty:
+            st.info("No sentiment data available for selected listings.")
+        else:
+            sent_rows["listing_id"] = sent_rows["listing_id"].astype(str)
+            # Melt to long format for stacked bar
+            sent_long = sent_rows.melt(
+                id_vars=["listing_id"],
+                value_vars=["positive_ratio", "neutral_ratio", "negative_ratio"],
+                var_name="sentiment",
+                value_name="ratio",
+            )
+            # Clean labels
+            label_map = {
+                "positive_ratio": "Positive",
+                "neutral_ratio": "Neutral",
+                "negative_ratio": "Negative",
+            }
+            color_map = {
+                "Positive": "#10B981",
+                "Neutral":  "#94A3B8",
+                "Negative": ACCENT,
+            }
+            sent_long["sentiment"] = sent_long["sentiment"].map(label_map)
+
+            fig_sent = px.bar(
+                sent_long,
+                x="listing_id",
+                y="ratio",
+                color="sentiment",
+                color_discrete_map=color_map,
+                category_orders={"sentiment": ["Positive", "Neutral", "Negative"]},
+                labels={"listing_id": "Listing ID", "ratio": "Proportion", "sentiment": "Sentiment"},
+                barmode="stack",
+            )
+            fig_sent.update_layout(
+                height=350,
+                margin=dict(l=10, r=10, t=30, b=40),
+                yaxis=dict(tickformat=".0%", range=[0, 1]),
+                xaxis=dict(type="category"),
+                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5),
+            )
+            # Add mean_sentiment annotation on each bar group
+            for _, srow in sent_rows.iterrows():
+                fig_sent.add_annotation(
+                    x=str(srow["listing_id"]),
+                    y=1.05,
+                    text=f"avg: {srow['mean_sentiment']:.2f}",
+                    showarrow=False,
+                    font=dict(size=11, color=GRAY),
+                )
+            st.plotly_chart(fig_sent, use_container_width=True)
+
+        # ── Scores table ────────────────────────────────────────────────
+        st.markdown("#### Review Scores")
         st.dataframe(
             sel_rows[["id","neighbourhood_cleansed","room_type_label","price_numeric"] + REVIEW_COLS]
             .rename(columns={"price_numeric":"actual_price ($)"})
