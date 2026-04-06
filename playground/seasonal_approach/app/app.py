@@ -376,34 +376,34 @@ with tab2:
         }
         sent_long["sentiment"] = sent_long["sentiment"].map(label_map)
 
-        fig_sent = px.bar(
-            sent_long,
-            x="listing_id",
-            y="ratio",
-            color="sentiment",
-            color_discrete_map=color_map,
-            category_orders={"sentiment": ["Positive", "Neutral", "Negative"]},
-            labels={"listing_id": "Listing ID", "ratio": "Proportion", "sentiment": "Sentiment"},
-            barmode="stack",
-        )
-        # Set a fixed bar width so single-listing bars aren't paper-thin
-        n_bars = len(sel_ids)
-        bar_width = min(0.6, max(0.15, 0.6 / n_bars)) if n_bars <= 2 else None
-        if bar_width:
-            fig_sent.update_traces(width=bar_width)
+        # Use short labels for x-axis to keep bars wide
+        sent_long["label"] = "ID " + sent_long["listing_id"].astype(str).str[-6:]
+        sent_rows["label"] = "ID " + sent_rows["listing_id"].astype(str).str[-6:]
+
+        fig_sent = go.Figure()
+        for sentiment_type, color in color_map.items():
+            subset = sent_long[sent_long["sentiment"] == sentiment_type]
+            fig_sent.add_trace(go.Bar(
+                x=subset["label"],
+                y=subset["ratio"],
+                name=sentiment_type,
+                marker_color=color,
+            ))
         fig_sent.update_layout(
+            barmode="stack",
+            bargap=0.5,
             height=350,
             margin=dict(l=10, r=10, t=30, b=40),
-            yaxis=dict(tickformat=".0%", range=[0, 1], fixedrange=True),
-            xaxis=dict(type="category", fixedrange=True),
-            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5),
+            yaxis=dict(title="Proportion", tickformat=".0%", range=[0, 1], fixedrange=True),
+            xaxis=dict(title="Listing ID", fixedrange=True),
+            legend=dict(title="Sentiment", orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5),
             dragmode=False,
         )
         # Add mean_sentiment annotation on each bar group
         for _, srow in sent_rows.iterrows():
             if pd.notna(srow["mean_sentiment"]):
                 fig_sent.add_annotation(
-                    x=str(srow["listing_id"]),
+                    x=srow["label"],
                     y=1.05,
                     text=f"avg: {srow['mean_sentiment']:.2f}",
                     showarrow=False,
@@ -411,7 +411,7 @@ with tab2:
                 )
             else:
                 fig_sent.add_annotation(
-                    x=str(srow["listing_id"]),
+                    x=srow["label"],
                     y=1.05,
                     text="N/A",
                     showarrow=False,
