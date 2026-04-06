@@ -386,6 +386,11 @@ with tab2:
             labels={"listing_id": "Listing ID", "ratio": "Proportion", "sentiment": "Sentiment"},
             barmode="stack",
         )
+        # Set a fixed bar width so single-listing bars aren't paper-thin
+        n_bars = len(sel_ids)
+        bar_width = min(0.6, max(0.15, 0.6 / n_bars)) if n_bars <= 2 else None
+        if bar_width:
+            fig_sent.update_traces(width=bar_width)
         fig_sent.update_layout(
             height=350,
             margin=dict(l=10, r=10, t=30, b=40),
