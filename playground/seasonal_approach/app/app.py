@@ -389,9 +389,10 @@ with tab2:
         fig_sent.update_layout(
             height=350,
             margin=dict(l=10, r=10, t=30, b=40),
-            yaxis=dict(tickformat=".0%", range=[0, 1]),
-            xaxis=dict(type="category"),
+            yaxis=dict(tickformat=".0%", range=[0, 1], fixedrange=True),
+            xaxis=dict(type="category", fixedrange=True),
             legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5),
+            dragmode=False,
         )
         # Add mean_sentiment annotation on each bar group
         for _, srow in sent_rows.iterrows():
@@ -411,7 +412,7 @@ with tab2:
                     showarrow=False,
                     font=dict(size=11, color=GRAY),
                 )
-        st.plotly_chart(fig_sent, use_container_width=True)
+        st.plotly_chart(fig_sent, use_container_width=True, config={"displayModeBar": False})
 
         # ── Scores table ────────────────────────────────────────────────
         st.markdown("#### Review Scores")
