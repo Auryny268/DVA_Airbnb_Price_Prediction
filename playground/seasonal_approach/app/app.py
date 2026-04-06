@@ -290,53 +290,58 @@ with tab2:
         sel_int_ids = [int(x) for x in sel_ids]
         listing_topic_rows = listing_topics[listing_topics["listing_id"].isin(sel_int_ids)]
 
-        # Render word clouds in columns (one per listing)
-        n_cols = min(len(sel_ids), 3)
-        for batch_start in range(0, len(sel_ids), n_cols):
-            batch = sel_ids[batch_start : batch_start + n_cols]
-            wc_cols = st.columns(len(batch))
-            for col, lid_str in zip(wc_cols, batch):
-                lid = int(lid_str)
-                lt_row = listing_topic_rows[listing_topic_rows["listing_id"] == lid]
-                with col:
-                    if lt_row.empty:
-                        st.caption(f"Listing {lid} — no topic data")
-                        continue
-                    lt = lt_row.iloc[0]
-                    # Gather top-3 topic ids and probabilities
-                    top_topics = []
-                    for rank in range(1, 4):
-                        tid = int(lt[f"top{rank}_topic"])
-                        prob = float(lt[f"top{rank}_prob"])
-                        top_topics.append((tid, prob))
+        # Pre-build word clouds only for listings that have topic data
+        wc_data = []  # list of (lid, caption, image_array)
+        for lid_str in sel_ids:
+            lid = int(lid_str)
+            lt_row = listing_topic_rows[listing_topic_rows["listing_id"] == lid]
+            if lt_row.empty:
+                continue
+            lt = lt_row.iloc[0]
+            top_topics = []
+            for rank in range(1, 4):
+                tid = int(lt[f"top{rank}_topic"])
+                prob = float(lt[f"top{rank}_prob"])
+                top_topics.append((tid, prob))
 
-                    # Build word frequency dict: word weight = topic_prob * (1 / word_rank)
-                    word_freq = {}
-                    for tid, prob in top_topics:
-                        words = topic_words_map.get(tid, [])
-                        for rank, w in enumerate(words):
-                            weight = prob * (1.0 / (rank + 1))
-                            word_freq[w] = word_freq.get(w, 0) + weight
+            word_freq = {}
+            for tid, prob in top_topics:
+                words = topic_words_map.get(tid, [])
+                for rank, w in enumerate(words):
+                    weight = prob * (1.0 / (rank + 1))
+                    word_freq[w] = word_freq.get(w, 0) + weight
 
-                    if not word_freq:
-                        st.caption(f"Listing {lid} — no words")
-                        continue
+            if not word_freq:
+                continue
 
-                    wc = WordCloud(
-                        width=400, height=280,
-                        background_color="white",
-                        colormap="viridis",
-                        max_words=30,
-                        prefer_horizontal=0.7,
-                        relative_scaling=0.5,
-                    ).generate_from_frequencies(word_freq)
+            wc = WordCloud(
+                width=400, height=280,
+                background_color="white",
+                colormap="viridis",
+                max_words=30,
+                prefer_horizontal=0.7,
+                relative_scaling=0.5,
+            ).generate_from_frequencies(word_freq)
 
-                    # Top topic labels for caption
-                    top_labels = [
-                        f"T{tid} ({prob:.0%})" for tid, prob in top_topics if prob > 0.001
-                    ]
-                    st.caption(f"**Listing {lid}** — {', '.join(top_labels)}")
-                    st.image(wc.to_array(), use_container_width=True)
+            top_labels = [
+                f"T{tid} ({prob:.0%})" for tid, prob in top_topics if prob > 0.001
+            ]
+            caption = f"**Listing {lid}** — {', '.join(top_labels)}"
+            wc_data.append((caption, wc.to_array()))
+
+        if not wc_data:
+            st.info("No topic data available for selected listings.")
+        else:
+            # Render in rows of up to 3, only for listings with data
+            WC_IMG_WIDTH = 400
+            cols_per_row = min(len(wc_data), 3)
+            for batch_start in range(0, len(wc_data), cols_per_row):
+                batch = wc_data[batch_start : batch_start + cols_per_row]
+                wc_cols = st.columns(cols_per_row)
+                for col, (caption, img) in zip(wc_cols, batch):
+                    with col:
+                        st.caption(caption)
+                        st.image(img, width=WC_IMG_WIDTH)
 
         # ── 3) Sentiment breakdown bar ──────────────────────────────────
         st.markdown("#### Sentiment Breakdown")
