@@ -340,51 +340,62 @@ with tab2:
 
         # ── 3) Sentiment breakdown bar ──────────────────────────────────
         st.markdown("#### Sentiment Breakdown")
-        sent_rows = sentiment_df[sentiment_df["listing_id"].isin(sel_int_ids)].copy()
+        # Left join: ensure all selected listings appear, even without sentiment data
+        sel_frame = pd.DataFrame({"listing_id": sel_int_ids})
+        sent_rows = sel_frame.merge(
+            sentiment_df[["listing_id", "positive_ratio", "neutral_ratio", "negative_ratio", "mean_sentiment"]],
+            on="listing_id",
+            how="left",
+        )
+        sent_rows["listing_id"] = sent_rows["listing_id"].astype(str)
 
-        if sent_rows.empty:
-            st.info("No sentiment data available for selected listings.")
-        else:
-            sent_rows["listing_id"] = sent_rows["listing_id"].astype(str)
-            # Melt to long format for stacked bar
-            sent_long = sent_rows.melt(
-                id_vars=["listing_id"],
-                value_vars=["positive_ratio", "neutral_ratio", "negative_ratio"],
-                var_name="sentiment",
-                value_name="ratio",
-            )
-            # Clean labels
-            label_map = {
-                "positive_ratio": "Positive",
-                "neutral_ratio": "Neutral",
-                "negative_ratio": "Negative",
-            }
-            color_map = {
-                "Positive": "#10B981",
-                "Neutral":  "#94A3B8",
-                "Negative": ACCENT,
-            }
-            sent_long["sentiment"] = sent_long["sentiment"].map(label_map)
+        # Flag listings with no sentiment data
+        missing_sent = sent_rows[sent_rows["positive_ratio"].isna()]["listing_id"].tolist()
+        if missing_sent:
+            st.caption(f"No sentiment data for listing(s): {', '.join(missing_sent)}")
 
-            fig_sent = px.bar(
-                sent_long,
-                x="listing_id",
-                y="ratio",
-                color="sentiment",
-                color_discrete_map=color_map,
-                category_orders={"sentiment": ["Positive", "Neutral", "Negative"]},
-                labels={"listing_id": "Listing ID", "ratio": "Proportion", "sentiment": "Sentiment"},
-                barmode="stack",
-            )
-            fig_sent.update_layout(
-                height=350,
-                margin=dict(l=10, r=10, t=30, b=40),
-                yaxis=dict(tickformat=".0%", range=[0, 1]),
-                xaxis=dict(type="category"),
-                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5),
-            )
-            # Add mean_sentiment annotation on each bar group
-            for _, srow in sent_rows.iterrows():
+        # Fill NaN so they still appear in the chart (as empty bars)
+        sent_rows = sent_rows.fillna({"positive_ratio": 0, "neutral_ratio": 0, "negative_ratio": 0})
+
+        # Melt to long format for stacked bar
+        sent_long = sent_rows.melt(
+            id_vars=["listing_id", "mean_sentiment"],
+            value_vars=["positive_ratio", "neutral_ratio", "negative_ratio"],
+            var_name="sentiment",
+            value_name="ratio",
+        )
+        label_map = {
+            "positive_ratio": "Positive",
+            "neutral_ratio": "Neutral",
+            "negative_ratio": "Negative",
+        }
+        color_map = {
+            "Positive": "#10B981",
+            "Neutral":  "#94A3B8",
+            "Negative": ACCENT,
+        }
+        sent_long["sentiment"] = sent_long["sentiment"].map(label_map)
+
+        fig_sent = px.bar(
+            sent_long,
+            x="listing_id",
+            y="ratio",
+            color="sentiment",
+            color_discrete_map=color_map,
+            category_orders={"sentiment": ["Positive", "Neutral", "Negative"]},
+            labels={"listing_id": "Listing ID", "ratio": "Proportion", "sentiment": "Sentiment"},
+            barmode="stack",
+        )
+        fig_sent.update_layout(
+            height=350,
+            margin=dict(l=10, r=10, t=30, b=40),
+            yaxis=dict(tickformat=".0%", range=[0, 1]),
+            xaxis=dict(type="category"),
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5),
+        )
+        # Add mean_sentiment annotation on each bar group
+        for _, srow in sent_rows.iterrows():
+            if pd.notna(srow["mean_sentiment"]):
                 fig_sent.add_annotation(
                     x=str(srow["listing_id"]),
                     y=1.05,
@@ -392,7 +403,15 @@ with tab2:
                     showarrow=False,
                     font=dict(size=11, color=GRAY),
                 )
-            st.plotly_chart(fig_sent, use_container_width=True)
+            else:
+                fig_sent.add_annotation(
+                    x=str(srow["listing_id"]),
+                    y=1.05,
+                    text="N/A",
+                    showarrow=False,
+                    font=dict(size=11, color=GRAY),
+                )
+        st.plotly_chart(fig_sent, use_container_width=True)
 
         # ── Scores table ────────────────────────────────────────────────
         st.markdown("#### Review Scores")
