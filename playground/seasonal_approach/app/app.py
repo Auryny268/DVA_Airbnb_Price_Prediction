@@ -62,9 +62,15 @@ REVIEW_LABELS = ["Overall", "Accuracy", "Cleanliness",
 
 BOROUGHS    = sorted(fm["neighbourhood_group_cleansed"].unique())
 ROOM_TYPES  = sorted(fm["room_type_label"].dropna().unique())
+<<<<<<< HEAD
 MONTH_OPTS = list(range(4, 12)) # April to November only
 MONTH_NAMES = {4:"Apr",5:"May",6:"Jun",
                7:"Jul",8:"Aug",9:"Sep",10:"Oct",11:"Nov"}
+=======
+MONTH_OPTS  = list(range(1, 13))
+MONTH_NAMES = {1:"Jan",2:"Feb",3:"Mar",4:"Apr",5:"May",6:"Jun",
+               7:"Jul",8:"Aug",9:"Sep",10:"Oct",11:"Nov",12:"Dec"}
+>>>>>>> 0bcfa6eca1db40f3a3f32a9c0497be8dd1c76f6c
 
 # ── Sidebar ───────────────────────────────────────────────────────────────────
 st.sidebar.image("https://upload.wikimedia.org/wikipedia/commons/thumb/6/69/Airbnb_Logo_B%C3%A9lo.svg/2560px-Airbnb_Logo_B%C3%A9lo.svg.png", width=120)
@@ -73,12 +79,17 @@ st.sidebar.title("Filters")
 selected_month = st.sidebar.selectbox(
     "Month",
     options=MONTH_OPTS,
+<<<<<<< HEAD
     index=0,   # April default
+=======
+    index=10,   # November default
+>>>>>>> 0bcfa6eca1db40f3a3f32a9c0497be8dd1c76f6c
     format_func=lambda m: MONTH_NAMES[m],
 )
 selected_boroughs = st.sidebar.multiselect(
     "Borough", BOROUGHS, default=BOROUGHS
 )
+<<<<<<< HEAD
 
 # Get neighborhoods only for the selected boroughs
 relevant_nbhds = sorted(fm[fm["neighbourhood_group_cleansed"].isin(selected_boroughs)]["neighbourhood_cleansed"].unique())
@@ -103,6 +114,8 @@ selected_nbhds = st.sidebar.multiselect(
     placeholder="All neighborhoods in selected boroughs"
 )
 
+=======
+>>>>>>> 0bcfa6eca1db40f3a3f32a9c0497be8dd1c76f6c
 selected_rooms = st.sidebar.multiselect(
     "Room type", ROOM_TYPES, default=ROOM_TYPES
 )
@@ -115,6 +128,7 @@ st.sidebar.markdown(
 )
 
 # ── Apply filters ─────────────────────────────────────────────────────────────
+<<<<<<< HEAD
 mask = (
     (preds["month"] == selected_month) &
     (preds["neighbourhood_group_cleansed"].isin(selected_boroughs)) &
@@ -135,6 +149,19 @@ if selected_nbhds:
     fm_mask &= fm["neighbourhood_cleansed"].isin(selected_nbhds)
 
 fm_filtered = fm[fm_mask].copy()
+=======
+map_df = preds[
+    (preds["month"] == selected_month) &
+    (preds["neighbourhood_group_cleansed"].isin(selected_boroughs)) &
+    (preds["room_type_label"].isin(selected_rooms))
+].copy()
+
+fm_filtered = fm[
+    (fm["neighbourhood_group_cleansed"].isin(selected_boroughs)) &
+    (fm["room_type_label"].isin(selected_rooms))
+].copy()
+
+>>>>>>> 0bcfa6eca1db40f3a3f32a9c0497be8dd1c76f6c
 # ── Header ────────────────────────────────────────────────────────────────────
 st.title("🗽 NYC Airbnb Price Predictor")
 st.caption(
@@ -146,6 +173,7 @@ st.caption(
 # KPI row
 med_pred = map_df["pred_price"].median()
 med_actual = map_df["price_numeric"].median()
+<<<<<<< HEAD
 delta_val = med_pred - med_actual
 k1, k2, k3, k4 = st.columns(4)
 k1.metric("Listings shown",     f"{len(map_df):,}")
@@ -158,6 +186,12 @@ k3.metric(
     delta=f"{delta_val:+.0f} vs Prediction",
     delta_color="inverse" # Red if pred > actual, Green if actual > pred
 )
+=======
+k1, k2, k3, k4 = st.columns(4)
+k1.metric("Listings shown",     f"{len(map_df):,}")
+k2.metric("Median predicted",   f"${med_pred:.0f}")
+k3.metric("Median actual (Nov)",f"${med_actual:.0f}")
+>>>>>>> 0bcfa6eca1db40f3a3f32a9c0497be8dd1c76f6c
 k4.metric("Seasonal index",     f"{si[si['month']==selected_month]['seasonal_index'].values[0]:.3f}×")
 
 st.markdown("---")
@@ -176,6 +210,7 @@ tab1, tab2, tab3, tab4 = st.tabs([
 with tab1:
     st.subheader(f"Predicted Nightly Prices — {MONTH_NAMES[selected_month]} 2025")
 
+<<<<<<< HEAD
     # Initialize Session State for Camera 
     if "map_view" not in st.session_state:
         st.session_state.map_view = {
@@ -198,12 +233,27 @@ with tab1:
             zoom=st.session_state.map_view["zoom"],
             center={"lat": st.session_state.map_view["lat"], 
                     "lon": st.session_state.map_view["lon"]},
+=======
+    col_map, col_hist = st.columns([3, 1])
+
+    with col_map:
+        fig_map = px.scatter_map(
+            map_df,
+            lat="latitude", lon="longitude",
+            color="pred_price",
+            color_continuous_scale="RdYlGn_r",
+            zoom=10,
+            center={"lat": 40.730, "lon": -73.935},
+>>>>>>> 0bcfa6eca1db40f3a3f32a9c0497be8dd1c76f6c
             opacity=0.75,
             size_max=8,
             labels={"pred_price": "Predicted Price ($)"},
             hover_data={
                 "latitude": False, "longitude": False,
+<<<<<<< HEAD
                 "log_pred_price": False,
+=======
+>>>>>>> 0bcfa6eca1db40f3a3f32a9c0497be8dd1c76f6c
                 "pred_price": ":$.0f",
                 "price_numeric": ":$.0f",
                 "neighbourhood_cleansed": True,
@@ -212,9 +262,12 @@ with tab1:
             custom_data=["neighbourhood_cleansed","room_type_label",
                          "pred_price","price_numeric"],
         )
+<<<<<<< HEAD
 
         # Manually fix the colorbar ticks so they show $ amounts instead of log decimals
         tick_vals = [50, 100, 200, 500, 1000, 2000]
+=======
+>>>>>>> 0bcfa6eca1db40f3a3f32a9c0497be8dd1c76f6c
         fig_map.update_traces(
             hovertemplate=(
                 "<b>%{customdata[0]}</b><br>"
@@ -223,6 +276,7 @@ with tab1:
                 "Actual Nov: $%{customdata[3]:.0f}<extra></extra>"
             )
         )
+<<<<<<< HEAD
 
         fig_map.update_layout(
             map_style="carto-positron",
@@ -262,11 +316,24 @@ with tab1:
         mean_color   = "rgba(0, 166, 153, 0)"  
         median_color = "rgba(51, 51, 51, 0)"   
 
+=======
+        fig_map.update_layout(
+            map_style="carto-positron",
+            coloraxis_colorbar=dict(title="Predicted ($)", tickprefix="$"),
+            margin=dict(l=0, r=0, t=0, b=0),
+            height=500,
+        )
+        st.plotly_chart(fig_map, use_container_width=True)
+
+    with col_hist:
+        st.markdown("**Price distribution**")
+>>>>>>> 0bcfa6eca1db40f3a3f32a9c0497be8dd1c76f6c
         fig_hist = px.histogram(
             map_df, x="pred_price", nbins=40,
             color_discrete_sequence=[ACCENT],
             labels={"pred_price": "Predicted ($)"},
         )
+<<<<<<< HEAD
 
         # 2. Add Mean Line (Dashed Teal)
         fig_hist.add_vline(
@@ -300,10 +367,16 @@ with tab1:
                 orientation="h",
                 font=dict(size=10)
             ), bargap=0.05,
+=======
+        fig_hist.update_layout(
+            height=220, margin=dict(l=10,r=10,t=10,b=30),
+            showlegend=False, bargap=0.05,
+>>>>>>> 0bcfa6eca1db40f3a3f32a9c0497be8dd1c76f6c
             xaxis_tickprefix="$",
         )
         st.plotly_chart(fig_hist, use_container_width=True)
 
+<<<<<<< HEAD
         st.markdown("**Seasonal index (Apr–Nov)**")
         
         # 1. Filter the seasonal index DataFrame
@@ -330,10 +403,24 @@ with tab1:
             # Ensure the Y-axis has some padding so the 1.0 line is clear
             yaxis=dict(range=[si_filtered["seasonal_index"].min() * 0.9, 
                              si_filtered["seasonal_index"].max() * 1.1])
+=======
+        st.markdown("**Seasonal index**")
+        bar_colors = [ACCENT if m == selected_month else "#E0E0E0" for m in si["month"]]
+        fig_si = go.Figure(go.Bar(
+            x=si["month_name"], y=si["seasonal_index"],
+            marker_color=bar_colors,
+        ))
+        fig_si.add_hline(y=1.0, line_dash="dash", line_color=GRAY)
+        fig_si.update_layout(
+            height=220, margin=dict(l=10,r=10,t=10,b=30),
+            xaxis_tickangle=-45, showlegend=False,
+            yaxis_title="Index",
+>>>>>>> 0bcfa6eca1db40f3a3f32a9c0497be8dd1c76f6c
         )
         st.plotly_chart(fig_si, use_container_width=True)
 
 # ─────────────────────────────────────────────────────────────────────────────
+<<<<<<< HEAD
 # TAB 2 — Spider Chart (Aggregate vs Selection)
 # ─────────────────────────────────────────────────────────────────────────────
 with tab2:
@@ -405,12 +492,78 @@ with tab2:
         st.dataframe(
             sel_rows[["id", "neighbourhood_cleansed", "price_numeric"] + REVIEW_COLS]
             .rename(columns={"price_numeric": "Price ($)"})
+=======
+# TAB 2 — Spider Chart per Listing
+# ─────────────────────────────────────────────────────────────────────────────
+with tab2:
+    st.subheader("Review Score Radar — Per Listing")
+    st.caption(
+        "Select up to 5 listings to compare their 7 review dimension scores. "
+        "Scores are on a 1–5 scale."
+    )
+
+    # Let user pick listings by neighbourhood + search
+    neigh_opts = sorted(fm_filtered["neighbourhood_cleansed"].unique())
+    sel_neigh  = st.selectbox("Filter by neighbourhood", ["All"] + neigh_opts)
+
+    if sel_neigh != "All":
+        neigh_fm = fm_filtered[fm_filtered["neighbourhood_cleansed"] == sel_neigh]
+    else:
+        neigh_fm = fm_filtered
+
+    # Show a sample table to pick from
+    display_cols = ["id","neighbourhood_cleansed","room_type_label","price_numeric"] + REVIEW_COLS
+    display_cols = [c for c in display_cols if c in neigh_fm.columns]
+    sample = neigh_fm[display_cols].dropna(subset=REVIEW_COLS).head(200)
+
+    sel_ids = st.multiselect(
+        "Select listing IDs to plot (up to 5)",
+        options=sample["id"].astype(str).tolist(),
+        default=sample["id"].astype(str).tolist()[:3],
+        max_selections=5,
+    )
+
+    if sel_ids:
+        sel_rows = fm[fm["id"].astype(str).isin(sel_ids)]
+        fig_spider = go.Figure()
+
+        colors = [ACCENT, TEAL, "#FFB400", "#8B5CF6", "#10B981"]
+        for i, (_, row) in enumerate(sel_rows.iterrows()):
+            scores = [row[c] for c in REVIEW_COLS]
+            scores_closed = scores + [scores[0]]   # close the polygon
+            labels_closed = REVIEW_LABELS + [REVIEW_LABELS[0]]
+            fig_spider.add_trace(go.Scatterpolar(
+                r=scores_closed,
+                theta=labels_closed,
+                fill="toself",
+                fillcolor=colors[i % len(colors)],
+                opacity=0.25,
+                line=dict(color=colors[i % len(colors)], width=2),
+                name=f"ID {row['id']} · {row.get('neighbourhood_cleansed','')[:20]}",
+            ))
+
+        fig_spider.update_layout(
+            polar=dict(radialaxis=dict(visible=True, range=[3.5, 5])),
+            height=500,
+            legend=dict(orientation="h", yanchor="bottom", y=-0.2),
+        )
+        st.plotly_chart(fig_spider, use_container_width=True)
+
+        # Show scores table
+        st.dataframe(
+            sel_rows[["id","neighbourhood_cleansed","room_type_label","price_numeric"] + REVIEW_COLS]
+            .rename(columns={"price_numeric":"actual_price ($)"})
+>>>>>>> 0bcfa6eca1db40f3a3f32a9c0497be8dd1c76f6c
             .set_index("id")
             .round(2),
             use_container_width=True,
         )
     else:
+<<<<<<< HEAD
         st.info("💡 **Pro-tip:** Use the multi-select above to overlay specific properties and see how they deviate from the neighborhood's average scores.")
+=======
+        st.info("Select at least one listing above.")
+>>>>>>> 0bcfa6eca1db40f3a3f32a9c0497be8dd1c76f6c
 
 # ─────────────────────────────────────────────────────────────────────────────
 # TAB 3 — SHAP Feature Importance (filterable)

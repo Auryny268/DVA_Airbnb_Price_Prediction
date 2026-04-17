@@ -205,3 +205,6 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# Large data files — download instructions in playground/seasonal_approach/data/external/DATASETS.md
+playground/seasonal_approach/data/external/reviews.csv

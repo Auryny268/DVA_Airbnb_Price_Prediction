@@ -1,0 +1,60 @@
+feature,mean_abs_shap
+prop_Private room,0.22209057
+accommodates,0.11605764
+boro_Manhattan,0.08154568
+number_of_reviews_ltm,0.080878854
+bedrooms,0.06954157
+review_scores_location,0.056076095
+beds,0.049379826
+poi_count_1km,0.047871407
+month,0.045678686
+review_scores_rating,0.044065345
+review_scores_value,0.043469775
+dist_lirr_km,0.035651073
+review_scores_cleanliness,0.03406299
+amenity_count,0.032482564
+has_elevator,0.029757716
+nearest_subway_cbd,0.028630232
+seasonal_index,0.028576598
+availability_365,0.025941415
+bathrooms,0.025642572
+has_washer,0.021526782
+dist_subway_km,0.021421885
+number_of_reviews,0.021165716
+poi_count_500m,0.019692091
+reviews_per_month,0.016580738
+has_gym,0.015422419
+tourist_poi_500m,0.014855748
+crime_count_500m,0.0146013005
+prop_Hotel room,0.014337878
+boro_Brooklyn,0.013842177
+review_scores_accuracy,0.011522871
+has_ac,0.008603872
+host_acceptance_rate_f,0.008281558
+boro_Queens,0.0077176145
+minimum_nights,0.0074838223
+has_pets_allowed,0.0074486975
+subway_lines_500m,0.007061042
+review_scores_checkin,0.006593076
+is_instant_bookable,0.005703043
+review_scores_communication,0.005532609
+room_type_ord,0.004262455
+host_response_rate_f,0.0031641324
+nearest_subway_ada,0.002633266
+has_parking,0.0026221243
+has_kitchen,0.002281816
+host_response_time_ord,0.0017822258
+has_dryer,0.0017360565
+prop_Entire home,0.0015120953
+is_superhost,0.001074766
+lirr_count_1mi,0.0009711188
+host_identity_verified_f,0.00078574615
+boro_Bronx,0.0007135487
+has_wifi,0.0007100872
+boro_Staten Island,0.0005191906
+has_license,0.00051839516
+prop_Shared room,0.00042841252
+has_pool,0.00027900853
+near_subway,0.00021017872
+has_doorman,0.0
+prop_Other,0.0
