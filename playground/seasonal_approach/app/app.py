@@ -5,12 +5,14 @@ Team 005 · CSE 6242 Spring 2026
 Run: streamlit run app.py
 """
 
+import ast
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 import plotly.express as px
 import streamlit as st
 from pathlib import Path
+from wordcloud import WordCloud
 
 # ── Page config ──────────────────────────────────────────────────────────────
 st.set_page_config(
@@ -47,9 +49,19 @@ def load_data():
     preds["room_type_label"] = preds["room_type_ord"].map(ROOM_MAP)
     si["month_name"] = si["month"].map(MONTH_NAMES)
 
-    return preds, fm, shap_pl, shap_sum, si
+    # Topic & sentiment data
+    topics_df      = pd.read_csv(DATA / "bertopic_avg_topics_new_2.csv")
+    listing_topics = pd.read_csv(DATA / "bertopic_avg_listing_topics_new_2.csv")
+    sentiment_df   = pd.read_csv(DATA / "listings_with_determinants.csv")
 
-preds, fm, shap_pl, shap_sum, si = load_data()
+    # Parse Representation column from string list to actual list
+    topics_df["words"] = topics_df["Representation"].apply(
+        lambda x: ast.literal_eval(x) if isinstance(x, str) else []
+    )
+
+    return preds, fm, shap_pl, shap_sum, si, topics_df, listing_topics, sentiment_df
+
+preds, fm, shap_pl, shap_sum, si, topics_df, listing_topics, sentiment_df = load_data()
 
 REVIEW_COLS = [
     "review_scores_rating", "review_scores_accuracy",
@@ -97,7 +109,7 @@ if clear_all:
     st.session_state.neigh_defaults = []
 
 selected_nbhds = st.sidebar.multiselect(
-    "Specific Neighborhoods", 
+    "Specific Neighborhoods",
     options=relevant_nbhds,
     default=[], # Default to empty so it doesn't clutter the map unless chosen
     placeholder="All neighborhoods in selected boroughs"
@@ -121,7 +133,7 @@ mask = (
     (preds["room_type_label"].isin(selected_rooms))
 )
 
-# If the user has picked specific neighborhoods, filter further. 
+# If the user has picked specific neighborhoods, filter further.
 # If they left it empty, we show all neighborhoods within the selected boroughs.
 if selected_nbhds:
     mask &= preds["neighbourhood_cleansed"].isin(selected_nbhds)
@@ -135,6 +147,7 @@ if selected_nbhds:
     fm_mask &= fm["neighbourhood_cleansed"].isin(selected_nbhds)
 
 fm_filtered = fm[fm_mask].copy()
+
 # ── Header ────────────────────────────────────────────────────────────────────
 st.title("🗽 NYC Airbnb Price Predictor")
 st.caption(
@@ -150,10 +163,8 @@ delta_val = med_pred - med_actual
 k1, k2, k3, k4 = st.columns(4)
 k1.metric("Listings shown",     f"{len(map_df):,}")
 k2.metric("Median predicted",   f"${med_pred:.0f}")
-# Update label to show it's specific to the selected month
-# TODO: Ask Rishikesh abt how Median actual works
 k3.metric(
-    label=f"Median Actual ({MONTH_NAMES[selected_month]})", 
+    label=f"Median Actual ({MONTH_NAMES[selected_month]})",
     value=f"${med_actual:.0f}",
     delta=f"{delta_val:+.0f} vs Prediction",
     delta_color="inverse" # Red if pred > actual, Green if actual > pred
@@ -176,14 +187,14 @@ tab1, tab2, tab3, tab4 = st.tabs([
 with tab1:
     st.subheader(f"Predicted Nightly Prices — {MONTH_NAMES[selected_month]} 2025")
 
-    # Initialize Session State for Camera 
+    # Initialize Session State for Camera
     if "map_view" not in st.session_state:
         st.session_state.map_view = {
             "lat": 40.730,
             "lon": -73.935,
             "zoom": 10
         }
-    
+
     col_map, col_hist = st.columns([3, 1])
 
     with col_map:
@@ -196,7 +207,7 @@ with tab1:
             color_continuous_scale="icefire",
             # Use the values stored in session state
             zoom=st.session_state.map_view["zoom"],
-            center={"lat": st.session_state.map_view["lat"], 
+            center={"lat": st.session_state.map_view["lat"],
                     "lon": st.session_state.map_view["lon"]},
             opacity=0.75,
             size_max=8,
@@ -232,12 +243,12 @@ with tab1:
         )
         if selected_nbhds:
             fig_map.update_layout(map_zoom=12) # Zoom in closer for specific neighborhoods
-    
-        # Catch User Map Interactions 
+
+        # Catch User Map Interactions
         # This returns a dictionary of the current state of the chart
         map_event = st.plotly_chart(
-            fig_map, 
-            use_container_width=True, 
+            fig_map,
+            use_container_width=True,
             key="nyc_map",       # Required for state tracking
             on_select="rerun"    # Triggers rerun when map is moved
         )
@@ -259,8 +270,8 @@ with tab1:
         mean_val = map_df["pred_price"].mean()
         med_val  = map_df["pred_price"].median()
         # Define transparent colors
-        mean_color   = "rgba(0, 166, 153, 0)"  
-        median_color = "rgba(51, 51, 51, 0)"   
+        mean_color   = "rgba(0, 166, 153, 0)"
+        median_color = "rgba(51, 51, 51, 0)"
 
         fig_hist = px.histogram(
             map_df, x="pred_price", nbins=40,
@@ -268,17 +279,17 @@ with tab1:
             labels={"pred_price": "Predicted ($)"},
         )
 
-        # 2. Add Mean Line (Dashed Teal)
+        # Add Mean Line (Dashed Teal)
         fig_hist.add_vline(
             x=mean_val, line_dash="dash", line_color=mean_color, line_width=2
         )
-        
-        # 3. Add Median Line (Solid Gray)
+
+        # Add Median Line (Solid Gray)
         fig_hist.add_vline(
             x=med_val, line_dash="solid", line_color=median_color, line_width=2
         )
 
-        # 4. Dummy traces to force a Legend
+        # Dummy traces to force a Legend
         fig_hist.add_trace(go.Scatter(
             x=[None], y=[None], mode="lines",
             line=dict(color=mean_color, dash="dash"),
@@ -293,10 +304,10 @@ with tab1:
         fig_hist.update_layout(
             height=220, margin=dict(l=10,r=10,t=10,b=30),
             showlegend=True, legend=dict(
-                x=0.98,              # Almost all the way to the right
-                y=0.95,              # Near the top
-                xanchor="right",     # Anchors the box from its right edge
-                yanchor="top",       # Anchors the box from its top edge
+                x=0.98,
+                y=0.95,
+                xanchor="right",
+                yanchor="top",
                 orientation="h",
                 font=dict(size=10)
             ), bargap=0.05,
@@ -305,112 +316,259 @@ with tab1:
         st.plotly_chart(fig_hist, use_container_width=True)
 
         st.markdown("**Seasonal index (Apr–Nov)**")
-        
-        # 1. Filter the seasonal index DataFrame
+
+        # Filter the seasonal index DataFrame to Apr-Nov
         si_filtered = si[(si["month"] >= 4) & (si["month"] <= 11)].copy()
-        
-        # 2. Update bar colors based on filtered data
+
+        # Update bar colors based on filtered data
         bar_colors = [ACCENT if m == selected_month else "#E0E0E0" for m in si_filtered["month"]]
-        
+
         fig_si = go.Figure(go.Bar(
-            x=si_filtered["month_name"], 
+            x=si_filtered["month_name"],
             y=si_filtered["seasonal_index"],
             marker_color=bar_colors,
             hovertemplate="Month: %{x}<br>Index: %{y:.3f}<extra></extra>"
         ))
-        
+
         fig_si.add_hline(y=1.0, line_dash="dash", line_color=GRAY)
-        
+
         fig_si.update_layout(
-            height=220, 
+            height=220,
             margin=dict(l=10, r=10, t=10, b=30),
-            xaxis_tickangle=-45, 
+            xaxis_tickangle=-45,
             showlegend=False,
             yaxis_title="Index",
-            # Ensure the Y-axis has some padding so the 1.0 line is clear
-            yaxis=dict(range=[si_filtered["seasonal_index"].min() * 0.9, 
+            yaxis=dict(range=[si_filtered["seasonal_index"].min() * 0.9,
                              si_filtered["seasonal_index"].max() * 1.1])
         )
         st.plotly_chart(fig_si, use_container_width=True)
 
 # ─────────────────────────────────────────────────────────────────────────────
-# TAB 2 — Spider Chart (Aggregate vs Selection)
+# TAB 2 — Listing Deep Dive (Spider Chart + Word Clouds + Sentiment)
 # ─────────────────────────────────────────────────────────────────────────────
 with tab2:
-    st.subheader("Review Score Radar")
-    st.caption("Benchmark specific listings against the broader market average.")
-
-    # 1. User Choice: Mean vs Median for the "General" view
-    agg_method = st.radio("Aggregate View:", ["Mean", "Median"], horizontal=True)
-    
-    if agg_method == "Mean":
-        baseline_scores = fm_filtered[REVIEW_COLS].mean().tolist()
-    else:
-        baseline_scores = fm_filtered[REVIEW_COLS].median().tolist()
-
-    # 2. Selection for comparison
-    sel_ids = st.multiselect(
-        "Select specific listing IDs to overlay (Max 3)",
-        options=fm_filtered["id"].astype(str).tolist(),
-        max_selections=3,
-        help="Compare individual properties to the neighborhood baseline."
+    st.subheader("Listing Deep Dive — Reviews, Topics & Sentiment")
+    st.caption(
+        "Select up to 5 listings to compare review scores (radar), "
+        "dominant review topics (word cloud), and sentiment breakdown."
     )
 
-    fig_spider = go.Figure()
+    # ── Listing selector ────────────────────────────────────────────────
+    neigh_opts = sorted(fm_filtered["neighbourhood_cleansed"].unique())
+    sel_neigh  = st.selectbox("Filter by neighbourhood", ["All"] + neigh_opts)
 
-    # Add the "General" Baseline trace
-    fig_spider.add_trace(go.Scatterpolar(
-        r=baseline_scores + [baseline_scores[0]],
-        theta=REVIEW_LABELS + [REVIEW_LABELS[0]],
-        mode='lines',
-        line=dict(color=GRAY, width=3, dash='dot'),
-        fill='toself',
-        fillcolor='rgba(118, 118, 118, 0.1)', # Subtle fill for the "area" of the city
-        name=f"Filtered Group {agg_method}"
-    ))
+    if sel_neigh != "All":
+        neigh_fm = fm_filtered[fm_filtered["neighbourhood_cleansed"] == sel_neigh]
+    else:
+        neigh_fm = fm_filtered
 
-    # Add Selected Listings
-    colors = [ACCENT, TEAL, "#FFB400"]
+    display_cols = ["id","neighbourhood_cleansed","room_type_label","price_numeric"] + REVIEW_COLS
+    display_cols = [c for c in display_cols if c in neigh_fm.columns]
+    sample = neigh_fm[display_cols].dropna(subset=REVIEW_COLS).head(200)
+
+    sel_ids = st.multiselect(
+        "Select listing IDs to plot (up to 5)",
+        options=sample["id"].astype(str).tolist(),
+        default=sample["id"].astype(str).tolist()[:3],
+        max_selections=5,
+    )
+
     if sel_ids:
-        sel_rows = fm_filtered[fm_filtered["id"].astype(str).isin(sel_ids)]
+        sel_rows = fm[fm["id"].astype(str).isin(sel_ids)]
+        colors = [ACCENT, TEAL, "#FFB400", "#8B5CF6", "#10B981"]
+
+        # ── 1) Review score radar ───────────────────────────────────────
+        st.markdown("#### Review Score Radar")
+        fig_spider = go.Figure()
         for i, (_, row) in enumerate(sel_rows.iterrows()):
             scores = [row[c] for c in REVIEW_COLS]
+            scores_closed = scores + [scores[0]]
+            labels_closed = REVIEW_LABELS + [REVIEW_LABELS[0]]
             fig_spider.add_trace(go.Scatterpolar(
-                r=scores + [scores[0]],
-                theta=REVIEW_LABELS + [REVIEW_LABELS[0]],
+                r=scores_closed,
+                theta=labels_closed,
                 fill="toself",
                 fillcolor=colors[i % len(colors)],
-                opacity=0.2,
+                opacity=0.25,
                 line=dict(color=colors[i % len(colors)], width=2),
-                name=f"Listing {row['id']}",
+                name=f"ID {row['id']} · {row.get('neighbourhood_cleansed','')[:20]}",
             ))
-    
-    fig_spider.update_layout(
-        polar=dict(
-            radialaxis=dict(visible=True, 
-            range=[3, 5], 
-            tickfont=dict(color="black")), # Focus on the high-end variance
-            angularaxis=dict(tickfont_size=12)
-        ),
-        height=500,
-        margin=dict(t=20, b=20),
-        legend=dict(orientation="h", yanchor="bottom", y=-0.2)
-    )
-    
-    st.plotly_chart(fig_spider, use_container_width=True)
+        fig_spider.update_layout(
+            polar=dict(
+                radialaxis=dict(visible=True, range=[3.5, 5],
+                                tickfont=dict(color="black")),
+                angularaxis=dict(tickfont_size=12),
+            ),
+            height=480,
+            margin=dict(t=20, b=20),
+            legend=dict(orientation="h", yanchor="bottom", y=-0.25),
+        )
+        st.plotly_chart(fig_spider, use_container_width=True)
 
-    # 3. Data Table (Only shown if listings are selected)
-    if sel_ids:
-        st.markdown("### Comparison Detail")
+        # ── 2) Word clouds — top 3 topics per listing ──────────────────
+        st.markdown("#### Top 3 Review Topics — Word Clouds")
+        # Build topic label & word lookup
+        topic_label_map = {}
+        topic_words_map = {}
+        for _, trow in topics_df.iterrows():
+            tid = int(trow["Topic"])
+            label = trow["Name"]
+            # Clean up the label: "0_host_recommend_comfortable_subway" → "host, recommend, comfortable, subway"
+            parts = label.split("_", 1)
+            if len(parts) > 1:
+                topic_label_map[tid] = parts[1].replace("_", ", ")
+            else:
+                topic_label_map[tid] = label
+            topic_words_map[tid] = trow["words"]
+
+        sel_int_ids = [int(x) for x in sel_ids]
+        listing_topic_rows = listing_topics[listing_topics["listing_id"].isin(sel_int_ids)]
+
+        # Pre-build word clouds only for listings that have topic data
+        wc_data = []  # list of (caption, image_array)
+        for lid_str in sel_ids:
+            lid = int(lid_str)
+            lt_row = listing_topic_rows[listing_topic_rows["listing_id"] == lid]
+            if lt_row.empty:
+                continue
+            lt = lt_row.iloc[0]
+            top_topics = []
+            for rank in range(1, 4):
+                tid = int(lt[f"top{rank}_topic"])
+                prob = float(lt[f"top{rank}_prob"])
+                top_topics.append((tid, prob))
+
+            word_freq = {}
+            for tid, prob in top_topics:
+                words = topic_words_map.get(tid, [])
+                for rank, w in enumerate(words):
+                    weight = prob * (1.0 / (rank + 1))
+                    word_freq[w] = word_freq.get(w, 0) + weight
+
+            if not word_freq:
+                continue
+
+            wc = WordCloud(
+                width=400, height=280,
+                background_color="white",
+                colormap="viridis",
+                max_words=30,
+                prefer_horizontal=0.7,
+                relative_scaling=0.5,
+            ).generate_from_frequencies(word_freq)
+
+            top_labels = [
+                f"T{tid} ({prob:.0%})" for tid, prob in top_topics if prob > 0.001
+            ]
+            caption = f"**Listing {lid}** — {', '.join(top_labels)}"
+            wc_data.append((caption, wc.to_array()))
+
+        if not wc_data:
+            st.info("No topic data available for selected listings.")
+        else:
+            # Render in rows of up to 3, only for listings with data
+            WC_IMG_WIDTH = 400
+            cols_per_row = min(len(wc_data), 3)
+            for batch_start in range(0, len(wc_data), cols_per_row):
+                batch = wc_data[batch_start : batch_start + cols_per_row]
+                wc_cols = st.columns(cols_per_row)
+                for col, (caption, img) in zip(wc_cols, batch):
+                    with col:
+                        st.caption(caption)
+                        st.image(img, width=WC_IMG_WIDTH)
+
+        # ── 3) Sentiment breakdown bar ──────────────────────────────────
+        st.markdown("#### Sentiment Breakdown")
+        # Left join: ensure all selected listings appear, even without sentiment data
+        sel_frame = pd.DataFrame({"listing_id": sel_int_ids})
+        sent_rows = sel_frame.merge(
+            sentiment_df[["listing_id", "positive_ratio", "neutral_ratio", "negative_ratio", "mean_sentiment"]],
+            on="listing_id",
+            how="left",
+        )
+        sent_rows["listing_id"] = sent_rows["listing_id"].astype(str)
+
+        # Flag listings with no sentiment data
+        missing_sent = sent_rows[sent_rows["positive_ratio"].isna()]["listing_id"].tolist()
+        if missing_sent:
+            st.caption(f"No sentiment data for listing(s): {', '.join(missing_sent)}")
+
+        # Fill NaN so they still appear in the chart (as empty bars)
+        sent_rows = sent_rows.fillna({"positive_ratio": 0, "neutral_ratio": 0, "negative_ratio": 0})
+
+        # Melt to long format for stacked bar
+        sent_long = sent_rows.melt(
+            id_vars=["listing_id", "mean_sentiment"],
+            value_vars=["positive_ratio", "neutral_ratio", "negative_ratio"],
+            var_name="sentiment",
+            value_name="ratio",
+        )
+        label_map = {
+            "positive_ratio": "Positive",
+            "neutral_ratio": "Neutral",
+            "negative_ratio": "Negative",
+        }
+        color_map = {
+            "Positive": "#10B981",
+            "Neutral":  "#94A3B8",
+            "Negative": ACCENT,
+        }
+        sent_long["sentiment"] = sent_long["sentiment"].map(label_map)
+
+        # Use short labels for x-axis to keep bars wide
+        sent_long["label"] = "ID " + sent_long["listing_id"].astype(str).str[-6:]
+        sent_rows["label"] = "ID " + sent_rows["listing_id"].astype(str).str[-6:]
+
+        fig_sent = go.Figure()
+        for sentiment_type, color in color_map.items():
+            subset = sent_long[sent_long["sentiment"] == sentiment_type]
+            fig_sent.add_trace(go.Bar(
+                x=subset["label"],
+                y=subset["ratio"],
+                name=sentiment_type,
+                marker_color=color,
+            ))
+        fig_sent.update_layout(
+            barmode="stack",
+            bargap=0.5,
+            height=350,
+            margin=dict(l=10, r=10, t=30, b=40),
+            yaxis=dict(title="Proportion", tickformat=".0%", range=[0, 1], fixedrange=True),
+            xaxis=dict(title="Listing ID", fixedrange=True),
+            legend=dict(title="Sentiment", orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5),
+            dragmode=False,
+        )
+        # Add mean_sentiment annotation on each bar group
+        for _, srow in sent_rows.iterrows():
+            if pd.notna(srow["mean_sentiment"]):
+                fig_sent.add_annotation(
+                    x=srow["label"],
+                    y=1.05,
+                    text=f"avg: {srow['mean_sentiment']:.2f}",
+                    showarrow=False,
+                    font=dict(size=11, color=GRAY),
+                )
+            else:
+                fig_sent.add_annotation(
+                    x=srow["label"],
+                    y=1.05,
+                    text="N/A",
+                    showarrow=False,
+                    font=dict(size=11, color=GRAY),
+                )
+        st.plotly_chart(fig_sent, use_container_width=True, config={"displayModeBar": False})
+
+        # ── Review Scores Table ─────────────────────────────────────────
+        st.markdown("#### Review Scores")
         st.dataframe(
-            sel_rows[["id", "neighbourhood_cleansed", "price_numeric"] + REVIEW_COLS]
-            .rename(columns={"price_numeric": "Price ($)"})
+            sel_rows[["id","neighbourhood_cleansed","room_type_label","price_numeric"] + REVIEW_COLS]
+            .rename(columns={"price_numeric": "actual_price ($)"})
             .set_index("id")
             .round(2),
             use_container_width=True,
         )
     else:
-        st.info("💡 **Pro-tip:** Use the multi-select above to overlay specific properties and see how they deviate from the neighborhood's average scores.")
+        st.info("Select at least one listing above.")
 
 # ─────────────────────────────────────────────────────────────────────────────
 # TAB 3 — SHAP Feature Importance (filterable)

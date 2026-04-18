@@ -1,0 +1,13 @@
+name: nyc-airbnb-app
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.12
+  - numpy
+  - pandas
+  - plotly
+  - pip
+  - pip:
+      - streamlit
+      - wordcloud
