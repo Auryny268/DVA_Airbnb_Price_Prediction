@@ -365,13 +365,8 @@ with tab2:
             "Select Listing IDs to Plot (up to 5)",
             options=all_ids,
             default=all_ids[:3],
-            format_func=lambda x: f"...{x[-6:]}",
             max_selections=5,
         )
-        if sel_ids:
-            st.caption(
-                "Full IDs: " + " · ".join(f"`{i}` (→...{i[-6:]})" for i in sel_ids)
-            )
 
     if sel_ids:
         sel_rows = fm[fm["id"].astype(str).isin(sel_ids)]
