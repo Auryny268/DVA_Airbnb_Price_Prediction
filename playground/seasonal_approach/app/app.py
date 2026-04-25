@@ -423,7 +423,7 @@ with tab2:
                 height=400, margin=dict(t=20, b=10),
                 legend=dict(orientation="h", yanchor="bottom", y=-0.3, font=dict(size=10)),
             )
-            st.plotly_chart(fig_spider, use_container_width=True)
+            st.plotly_chart(fig_spider, use_container_width=True, config={"scrollZoom": False, "displayModeBar": False})
 
             st.markdown("#### Review Scores")
             review_display = sel_rows[
