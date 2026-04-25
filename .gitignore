@@ -211,3 +211,5 @@ playground/seasonal_approach/data/external/reviews.csv
 
 # Streamlit secrets — never commit the real secrets.toml
 .streamlit/secrets.toml
+
+.DS_Store
