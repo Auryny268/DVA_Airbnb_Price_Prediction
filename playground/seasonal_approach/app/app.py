@@ -77,10 +77,11 @@ MONTH_OPTS  = list(range(4, 12))
 MONTH_NAMES = {4:"Apr",5:"May",6:"Jun",7:"Jul",8:"Aug",9:"Sep",10:"Oct",11:"Nov"}
 
 # ── Sidebar ───────────────────────────────────────────────────────────────────
-st.sidebar.image(
-    "https://upload.wikimedia.org/wikipedia/commons/thumb/6/69/Airbnb_Logo_B%C3%A9lo.svg/2560px-Airbnb_Logo_B%C3%A9lo.svg.png",
-    width=120,
-)
+_logo = Path(__file__).parent / "assets" / "airbnb_logo.png"
+if _logo.exists():
+    st.sidebar.image(str(_logo), width=120)
+else:
+    st.sidebar.markdown("### 🏠 Airbnb")
 st.sidebar.title("Filters")
 st.sidebar.caption("Use these filters to narrow the listings shown across all charts.")
 
