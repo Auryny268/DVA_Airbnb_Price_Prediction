@@ -208,3 +208,6 @@ __marimo__/
 
 # Large data files — download instructions in playground/seasonal_approach/data/external/DATASETS.md
 playground/seasonal_approach/data/external/reviews.csv
+
+# Streamlit secrets — never commit the real secrets.toml
+.streamlit/secrets.toml

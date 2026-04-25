@@ -10,3 +10,4 @@ scikit-learn
 shap
 plotly
 streamlit
+anthropic>=0.60
