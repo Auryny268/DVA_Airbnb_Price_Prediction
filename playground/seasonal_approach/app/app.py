@@ -14,6 +14,8 @@ import streamlit as st
 from pathlib import Path
 from wordcloud import WordCloud
 
+from chat_tab import render_chat_tab
+
 st.set_page_config(
     page_title="NYC Airbnb Price Predictor",
     page_icon="🗽",
@@ -205,11 +207,12 @@ st.caption("Left two tiles reflect your filter selections only. Right two tiles 
 st.markdown("---")
 
 # ── Tabs ──────────────────────────────────────────────────────────────────────
-tab1, tab2, tab3, tab4 = st.tabs([
+tab1, tab2, tab3, tab4, tab5 = st.tabs([
     "🗺️ Price Map",
     "🕸️ Listing Deep Dive",
     "📊 SHAP Feature Importance",
     "📋 Data Explorer",
+    "💬 Ask the Data",
 ])
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -365,13 +368,8 @@ with tab2:
             "Select Listing IDs to Plot (up to 5)",
             options=all_ids,
             default=all_ids[:3],
-            format_func=lambda x: f"...{x[-6:]}",
             max_selections=5,
         )
-        if sel_ids:
-            st.caption(
-                "Full IDs: " + " · ".join(f"`{i}` (→...{i[-6:]})" for i in sel_ids)
-            )
 
     if sel_ids:
         sel_rows = fm[fm["id"].astype(str).isin(sel_ids)]
@@ -765,3 +763,9 @@ with tab4:
         file_name="nyc_airbnb_filtered.csv",
         mime="text/csv",
     )
+
+# ─────────────────────────────────────────────────────────────────────────────
+# TAB 5 - Ask the Data (Claude chat)
+# ─────────────────────────────────────────────────────────────────────────────
+with tab5:
+    render_chat_tab()
