@@ -1,0 +1,9 @@
+numpy
+pandas
+scipy
+xgboost
+scikit-learn
+shap
+plotly
+streamlit
+anthropic>=0.60
