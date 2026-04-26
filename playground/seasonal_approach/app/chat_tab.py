@@ -13,8 +13,12 @@ from __future__ import annotations
 import json
 import os
 
-import anthropic
 import streamlit as st
+
+try:
+    import anthropic
+except ModuleNotFoundError:  # pragma: no cover - deployment/runtime safeguard
+    anthropic = None
 
 from chat_data import SCHEMA_SUMMARY, load_data
 from chat_tools import TOOL_SCHEMAS, execute_tool
@@ -147,6 +151,13 @@ def render_chat_tab() -> None:
         "Chat with Claude about the full dataset. The assistant calls tools to query "
         "the data — no guessing. This tab ignores the global sidebar filters."
     )
+
+    if anthropic is None:
+        st.error(
+            "Missing Python package `anthropic`. Add it to the deployment dependencies "
+            "and redeploy the app to enable this tab."
+        )
+        return
 
     api_key = _secret("ANTHROPIC_API_KEY")
     if not api_key:

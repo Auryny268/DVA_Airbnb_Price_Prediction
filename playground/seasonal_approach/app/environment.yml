@@ -9,5 +9,6 @@ dependencies:
   - plotly
   - pip
   - pip:
+      - anthropic>=0.60
       - streamlit
       - wordcloud
