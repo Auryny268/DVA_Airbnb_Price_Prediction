@@ -388,8 +388,49 @@ with tab2:
                 unsafe_allow_html=True,
             )
 
-        # LEFT: Radar + Review Scores Table
+        # LEFT: Mini-map + Radar + Review Scores Table
         with left_col:
+            st.markdown("#### Selected Listing Locations")
+            mini_map_df = sel_rows[
+                ["id", "latitude", "longitude", "price_numeric", "neighbourhood_cleansed"]
+            ].dropna(subset=["latitude", "longitude"])
+            if not mini_map_df.empty:
+                center_lat = (mini_map_df["latitude"].max() + mini_map_df["latitude"].min()) / 2
+                center_lon = (mini_map_df["longitude"].max() + mini_map_df["longitude"].min()) / 2
+                lat_span = mini_map_df["latitude"].max() - mini_map_df["latitude"].min()
+                lon_span = mini_map_df["longitude"].max() - mini_map_df["longitude"].min()
+                # Treat the copyright bar (~20px) as dead vertical space so dots
+                # are always in the usable area; then shift center north to compensate.
+                map_h, map_w, copyright_px = 260, 440, 20
+                usable_h = map_h - copyright_px
+                padding = 2.5
+                z_lon = np.log2((map_w / 512) * 360 / (max(lon_span, 0.01) * padding))
+                z_lat = np.log2((usable_h / 512) * 360 / (max(lat_span, 0.005) * padding))
+                auto_zoom = float(np.clip(min(z_lon, z_lat), 9.0, 13.0))
+                # Shift center north by half the copyright bar's height in map-degrees
+                visible_lat = (map_h / 512) * (360 / 2 ** auto_zoom)
+                center_lat += visible_lat * copyright_px / (2 * map_h)
+                fig_mini = px.scatter_map(
+                    mini_map_df,
+                    lat="latitude",
+                    lon="longitude",
+                    color="price_numeric",
+                    hover_name="neighbourhood_cleansed",
+                    hover_data={"id": True, "price_numeric": True,
+                                "latitude": False, "longitude": False},
+                    color_continuous_scale="RdYlGn_r",
+                    zoom=auto_zoom,
+                    center={"lat": center_lat, "lon": center_lon},
+                    height=260,
+                    map_style="carto-positron",
+                )
+                fig_mini.update_layout(
+                    margin=dict(t=0, b=0, l=0, r=0),
+                    coloraxis_showscale=False,
+                )
+                st.plotly_chart(fig_mini, use_container_width=True,
+                                config={"displayModeBar": False})
+
             st.markdown("#### Review Score Radar")
             st.caption(
                 "Each axis represents a review score category. "
